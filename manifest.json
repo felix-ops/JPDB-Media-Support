@@ -3,9 +3,7 @@
     "short_name": "JPDB Media Importer",
     "description": "Imports Media from Anki deck",
     "version": "0.0.1",
-    "version_name": "0.0.1",
     "manifest_version": 3,
-    "minimum_chrome_version": "88",
     "content_security_policy": {
         "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
       },
@@ -29,7 +27,15 @@
         "storage"
       ],
       "host_permissions": [
-        "http://localhost:8765/*"
+        "http://localhost:8765/*",
+        "https://jpdb.io/*"
+      ],
+      "content_scripts": [
+        {
+          "matches": ["https://jpdb.io/review*"],
+          "js": ["content.js"],
+          "run_at": "document_end"
+        }
       ]
 }
 

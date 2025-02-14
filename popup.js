@@ -1,19 +1,60 @@
-// Global variable to store fetched cards info
+// Global variable to store all fetched cards from the selected deck
 let fetchedCards = [];
 
-// Helper function to guess MIME type based on filename extension
+/**
+ * Helper to determine MIME type (for later use if needed).
+ */
 function getMimeType(filename) {
   if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) return 'image/jpeg';
   if (filename.endsWith('.png')) return 'image/png';
   if (filename.endsWith('.gif')) return 'image/gif';
+  if (filename.endsWith('.mp3')) return 'audio/mpeg';
   return 'application/octet-stream';
 }
 
-// Fetch decks and populate the deck dropdown using deckNames action
+/**
+ * Load stored settings from local storage and apply them to UI.
+ */
+function loadSettings() {
+  chrome.storage.local.get(
+    ['jpdbApiKey', 'selectedDeck', 'selectedContextField', 'selectedImageField', 'selectedAudioField'],
+    function(data) {
+      if (data.jpdbApiKey) {
+        document.getElementById('jpdbApiKey').value = data.jpdbApiKey;
+      }
+      if (data.selectedDeck) {
+        document.getElementById('deckSelect').value = data.selectedDeck;
+      }
+      if (data.selectedContextField) {
+        document.getElementById('contextFieldSelect').value = data.selectedContextField;
+      }
+      if (data.selectedImageField) {
+        document.getElementById('imageFieldSelect').value = data.selectedImageField;
+      }
+      if (data.selectedAudioField) {
+        document.getElementById('audioFieldSelect').value = data.selectedAudioField;
+      }
+    }
+  );
+}
+
+/**
+ * Save a setting to local storage.
+ */
+function saveSetting(key, value) {
+  let setting = {};
+  setting[key] = value;
+  chrome.storage.local.set(setting);
+}
+
+/**
+ * Fetch decks using Anki Connect's deckNames action.
+ */
 async function fetchDecks() {
   const ankiUrl = document.getElementById('url').value.trim();
   const deckSelect = document.getElementById('deckSelect');
   deckSelect.innerHTML = '<option value="">-- Loading decks --</option>';
+  console.log("Fetching decks from:", ankiUrl);
   
   try {
     const response = await fetch(ankiUrl, {
@@ -25,6 +66,7 @@ async function fetchDecks() {
       })
     });
     const data = await response.json();
+    console.log("Decks response:", data);
     deckSelect.innerHTML = '';
     if (data.result && Array.isArray(data.result)) {
       data.result.forEach(deckName => {
@@ -33,23 +75,32 @@ async function fetchDecks() {
         option.text = deckName;
         deckSelect.appendChild(option);
       });
+      if (data.result.length === 0) {
+        deckSelect.innerHTML = '<option value="">-- No decks found --</option>';
+      }
     } else {
       deckSelect.innerHTML = '<option value="">-- No decks found --</option>';
     }
   } catch (error) {
     deckSelect.innerHTML = '<option value="">-- Error loading decks --</option>';
+    console.error('Error fetching decks:', error);
   }
 }
 
-// Load cards from the selected deck using findCards and cardsInfo actions
-async function loadCards() {
+/**
+ * Load cards for the selected deck using findCards and cardsInfo.
+ * Then, use the fields from the first card to populate the three field dropdowns.
+ */
+async function loadCardsAndFields() {
   const ankiUrl = document.getElementById('url').value.trim();
   const deckSelect = document.getElementById('deckSelect');
   const deckName = deckSelect.value;
-  const cardSelect = document.getElementById('cardSelect');
   const resultDiv = document.getElementById('result');
-
-  cardSelect.innerHTML = '<option value="">-- Loading cards --</option>';
+  
+  // Save selected deck
+  saveSetting('selectedDeck', deckName);
+  
+  // Clear previous state
   resultDiv.innerHTML = '';
   fetchedCards = [];
   
@@ -59,7 +110,7 @@ async function loadCards() {
   }
   
   try {
-    // Use findCards to get card IDs for the selected deck
+    // Get card IDs from the deck
     const findCardsResponse = await fetch(ankiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -70,12 +121,13 @@ async function loadCards() {
       })
     });
     const findCardsData = await findCardsResponse.json();
+    console.log("findCards response:", findCardsData);
     if (!findCardsData.result || findCardsData.result.length === 0) {
-      cardSelect.innerHTML = '<option value="">-- No cards found --</option>';
+      alert('No cards found in the selected deck.');
       return;
     }
     
-    // Use cardsInfo to get details for each card
+    // Get detailed info for these cards
     const cardIds = findCardsData.result;
     const cardsInfoResponse = await fetch(ankiUrl, {
       method: 'POST',
@@ -87,108 +139,184 @@ async function loadCards() {
       })
     });
     const cardsInfoData = await cardsInfoResponse.json();
+    console.log("cardsInfo response:", cardsInfoData);
     if (!cardsInfoData.result || cardsInfoData.result.length === 0) {
-      cardSelect.innerHTML = '<option value="">-- No card information retrieved --</option>';
+      alert('Failed to retrieve card information.');
       return;
     }
     
     fetchedCards = cardsInfoData.result;
-    cardSelect.innerHTML = '<option value="">-- Select a card --</option>';
-    fetchedCards.forEach(card => {
-      const option = document.createElement('option');
-      option.value = card.cardId; // cardId uniquely identifies the card
-      // Use the first field's text (with HTML stripped) as a brief summary
-      const fields = card.fields;
-      const firstFieldName = Object.keys(fields)[0];
-      const summary = fields[firstFieldName].value.replace(/<[^>]+>/g, '').substring(0, 20);
-      option.text = `Card ${card.cardId} - ${summary}`;
-      cardSelect.appendChild(option);
-    });
+    
+    // Populate the field dropdowns using fields from the first card (assumes uniformity)
+    const firstCard = fetchedCards[0];
+    const fieldNames = Object.keys(firstCard.fields);
+    populateFieldDropdown('contextFieldSelect', fieldNames);
+    populateFieldDropdown('imageFieldSelect', fieldNames);
+    populateFieldDropdown('audioFieldSelect', fieldNames);
   } catch (error) {
-    cardSelect.innerHTML = `<option value="">-- Error loading cards --</option>`;
+    console.error('Error loading cards:', error);
   }
 }
 
-// Automatically load decks when the popup loads
-window.addEventListener('load', fetchDecks);
-
-// When a deck is selected, automatically update the card dropdown
-document.getElementById('deckSelect').addEventListener('change', loadCards);
-
-// When a card is selected, parse its fields using a DOM parser to get image src values
-document.getElementById('showImage').addEventListener('click', async () => {
-  const ankiUrl = document.getElementById('url').value.trim();
-  const cardSelect = document.getElementById('cardSelect');
-  const resultDiv = document.getElementById('result');
-  const selectedCardId = cardSelect.value;
-  
-  if (!ankiUrl || !selectedCardId) {
-    alert('Please ensure you have selected an Anki Connect URL and a card.');
-    return;
-  }
-  
-  // Find the selected card object from fetchedCards
-  const card = fetchedCards.find(c => c.cardId == selectedCardId);
-  if (!card) {
-    resultDiv.innerText = 'Selected card not found.';
-    return;
-  }
-  
-  // Combine all fields from the card into one HTML string
-  let combinedHTML = '';
-  Object.keys(card.fields).forEach(fieldName => {
-    combinedHTML += card.fields[fieldName].value + ' ';
+/**
+ * Utility to populate a select element with a given list of field names.
+ */
+function populateFieldDropdown(selectId, fieldNames) {
+  const selectElem = document.getElementById(selectId);
+  selectElem.innerHTML = '<option value="">-- Select a field --</option>';
+  fieldNames.forEach(fieldName => {
+    const option = document.createElement('option');
+    option.value = fieldName;
+    option.text = fieldName;
+    selectElem.appendChild(option);
   });
+}
+
+/**
+ * Call the JPDB API for a given context text and return an array of vocabulary IDs.
+ */
+async function getVidsFromContext(contextText) {
+  const jpdbUrl = "https://jpdb.io/api/v1/parse";
+  // Use the API key entered by the user
+  const token = document.getElementById('jpdbApiKey').value.trim();
   
-  // Use a DOM parser approach instead of regex to extract all <img> src values
-  const container = document.createElement('div');
-  container.innerHTML = combinedHTML;
-  const imgElements = container.querySelectorAll('img');
-  let imageFilenames = [];
-  imgElements.forEach(img => {
-    // Directly use the src attribute; this will contain the full filename including literal quotes
-    imageFilenames.push(img.getAttribute('src'));
-  });
-  
-  if (imageFilenames.length === 0) {
-    resultDiv.innerText = 'No images found in the selected card.';
-    return;
-  }
-  
-  // Choose one image at random (or simply the first if you prefer)
-  const randomIndex = Math.floor(Math.random() * imageFilenames.length);
-  const randomImageFilename = imageFilenames[randomIndex];
-  console.log("Selected image filename:", randomImageFilename);
-  
-  // Retrieve the media file using retrieveMediaFile
   try {
-    const mediaResponse = await fetch(ankiUrl, {
+    const response = await fetch(jpdbUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({
-        action: 'retrieveMediaFile',
-        version: 6,
-        params: { filename: randomImageFilename }
+        text: contextText,
+        token_fields: [
+          "vocabulary_index",
+          "position",
+          "length",
+          "furigana"
+        ],
+        position_length_encoding: "utf16",
+        vocabulary_fields: [
+          "vid",
+          "sid",
+          "rid",
+          "spelling",
+          "reading",
+          "frequency_rank",
+          "meanings"
+        ]
       })
     });
-    const mediaData = await mediaResponse.json();
+    const data = await response.json();
+    console.log("JPDB API response:", data);
+    // From the response, extract vocabulary ids.
+    if (data.vocabulary && Array.isArray(data.vocabulary)) {
+      return data.vocabulary.map(vocab => String(vocab[0]));
+    }
+  } catch (error) {
+    console.error('Error fetching JPDB data:', error);
+  }
+  return [];
+}
+
+/**
+ * Process all cards in the selected deck and build the data JSON.
+ * Adds a 0.5 second delay per card and shows a progress bar.
+ */
+async function fetchAndStoreData() {
+  const contextField = document.getElementById('contextFieldSelect').value;
+  const imageField = document.getElementById('imageFieldSelect').value;
+  const audioField = document.getElementById('audioFieldSelect').value;
+  const resultDiv = document.getElementById('result');
+  const progressBar = document.getElementById('progressBar');
+  
+  // Save selected field settings
+  saveSetting('selectedContextField', contextField);
+  saveSetting('selectedImageField', imageField);
+  saveSetting('selectedAudioField', audioField);
+  
+  if (!contextField || !imageField || !audioField) {
+    alert('Please select fields for context, image, and audio.');
+    return;
+  }
+  
+  const token = document.getElementById('jpdbApiKey').value.trim();
+  if (!token) {
+    alert('Please enter a valid JPDB API key.');
+    return;
+  }
+  
+  let dataJson = {
+    cards: {},
+    vid: {}
+  };
+  
+  progressBar.style.display = 'block';
+  progressBar.value = 0;
+  
+  const totalCards = fetchedCards.length;
+  
+  // Process each card sequentially
+  for (let i = 0; i < totalCards; i++) {
+    const card = fetchedCards[i];
+    const cardId = card.cardId;  // Unique card id
+    const contextText = card.fields[contextField].value.trim();
+    const imageText = card.fields[imageField].value.trim();
+    const audioText = card.fields[audioField].value.trim();
     
-    if (!mediaData.result) {
-      resultDiv.innerText = 'Failed to retrieve the media file. ' + (mediaData.error || '');
-      console.error("Media response error:", mediaData);
-      return;
+    // Delay of 0.5 seconds per card
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Get vocabulary ids by calling the JPDB API with the context text.
+    let vids = [];
+    if (contextText) {
+      vids = await getVidsFromContext(contextText);
     }
     
-    // Build a data URL from the base64 result and display the image
-    const mimeType = getMimeType(randomImageFilename);
-    const dataUrl = `data:${mimeType};base64,${mediaData.result}`;
-    resultDiv.innerHTML = '';
-    const imgElem = document.createElement('img');
-    imgElem.src = dataUrl;
-    imgElem.alt = randomImageFilename;
-    resultDiv.appendChild(imgElem);
+    // Save this card's data
+    dataJson.cards[cardId] = {
+      context: contextText,
+      image: imageText,
+      audio: audioText,
+      vids: vids
+    };
     
-  } catch (error) {
-    resultDiv.innerText = 'Error: ' + error.message;
+    // Update the reverse mapping: for each vid, add this card id.
+    vids.forEach(vid => {
+      if (!dataJson.vid[vid]) {
+        dataJson.vid[vid] = { cards: [] };
+      }
+      dataJson.vid[vid].cards.push(cardId);
+    });
+    
+    // Update progress bar
+    progressBar.value = Math.round(((i + 1) / totalCards) * 100);
   }
+  
+  // Hide progress bar after completion
+  progressBar.style.display = 'none';
+  
+  // Store the JSON in extension local storage
+  chrome.storage.local.set({ jpdbData: dataJson }, () => {
+    resultDiv.innerText = 'Data fetched and stored successfully!';
+    console.log('Stored data:', dataJson);
+  });
+}
+
+/**
+ * Event Listeners:
+ * - Load decks and stored settings on DOMContentLoaded.
+ * - When a deck is selected, automatically load cards and populate the field dropdowns.
+ * - When the "Fetch Data" button is clicked, process all cards.
+ * - Save API key changes.
+ */
+document.addEventListener('DOMContentLoaded', () => {
+  fetchDecks();
+  loadSettings();
+});
+document.getElementById('deckSelect').addEventListener('change', loadCardsAndFields);
+document.getElementById('fetchData').addEventListener('click', fetchAndStoreData);
+document.getElementById('jpdbApiKey').addEventListener('change', (e) => {
+  saveSetting('jpdbApiKey', e.target.value.trim());
 });

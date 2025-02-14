@@ -7,18 +7,21 @@
     body {
       font-family: sans-serif;
       padding: 10px;
-      width: 300px;
+      width: 320px;
     }
-    input, select, button {
+    input, select, button, progress {
       width: 100%;
       margin: 5px 0;
       box-sizing: border-box;
+      font-size: 14px;
     }
-    img {
-      max-width: 100%;
-      height: auto;
-      display: block;
+    #result {
       margin-top: 10px;
+      word-break: break-all;
+      max-height: 200px;
+      overflow-y: auto;
+      background: #f7f7f7;
+      padding: 5px;
     }
   </style>
 </head>
@@ -33,12 +36,27 @@
     <option value="">-- Loading decks --</option>
   </select>
   
-  <label for="cardSelect">Select Card:</label>
-  <select id="cardSelect">
-    <option value="">-- Select a card --</option>
+  <label for="contextFieldSelect">Context Field:</label>
+  <select id="contextFieldSelect">
+    <option value="">-- Select context field --</option>
   </select>
   
-  <button id="showImage">Show Image</button>
+  <label for="imageFieldSelect">Image Field:</label>
+  <select id="imageFieldSelect">
+    <option value="">-- Select image field --</option>
+  </select>
+  
+  <label for="audioFieldSelect">Audio Field:</label>
+  <select id="audioFieldSelect">
+    <option value="">-- Select audio field --</option>
+  </select>
+  
+  <label for="jpdbApiKey">JPDB API Key:</label>
+  <input type="text" id="jpdbApiKey" placeholder="Enter JPDB API Key" value="">
+  
+  <button id="fetchData">Fetch Data</button>
+  
+  <progress id="progressBar" value="0" max="100" style="width: 100%; display:none;"></progress>
   
   <div id="result"></div>
   
