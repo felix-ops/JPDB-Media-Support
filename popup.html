@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>JPDB Media Importer</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 10px;
+      width: 300px;
+    }
+    input, select, button {
+      width: 100%;
+      margin: 5px 0;
+      box-sizing: border-box;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h2>JPDB Media Importer</h2>
+  
+  <label for="url">Anki Connect URL:</label>
+  <input type="text" id="url" placeholder="http://localhost:8765" value="http://localhost:8765">
+  
+  <label for="deckSelect">Select Deck:</label>
+  <select id="deckSelect">
+    <option value="">-- Loading decks --</option>
+  </select>
+  
+  <label for="cardSelect">Select Card:</label>
+  <select id="cardSelect">
+    <option value="">-- Select a card --</option>
+  </select>
+  
+  <button id="showImage">Show Image</button>
+  
+  <div id="result"></div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
