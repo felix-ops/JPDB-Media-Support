@@ -129,9 +129,26 @@ async function fetchMediaFile(filename) {
 }
 
 // ------------------------------
-// Main Insertion Function
+// Hide native website content (sentence, audio, translation)
 // ------------------------------
+function removeExistingContent() {
+  // Remove native sentence and translation if present.
+  const existingCardSentence = document.querySelector(".card-sentence");
+  if (existingCardSentence) {
+    const existingTranslation = existingCardSentence.nextElementSibling;
+    if (existingTranslation && existingTranslation.querySelector(".sentence-translation")) {
+      existingTranslation.remove();
+    }
+    existingCardSentence.remove();
+  }
+  // Remove native audio button(s) that are not ours.
+  const nativeAudioBtns = document.querySelectorAll("a.icon-link.example-audio:not(#jpdb-media-audio)");
+  nativeAudioBtns.forEach(btn => btn.remove());
+}
 
+// ------------------------------
+// Main Insertion Function with Card Toggle
+// ------------------------------
 async function insertMediaInReview() {
   const vid = extractVidFromUrl();
   if (!vid) {
@@ -140,6 +157,7 @@ async function insertMediaInReview() {
   }
   
   chrome.storage.local.get("jpdbData", async (data) => {
+    // If there's no local data for this vocabulary, let the website render its content.
     if (!data.jpdbData) {
       console.warn("No JPDB data found in storage");
       return;
@@ -156,28 +174,16 @@ async function insertMediaInReview() {
       return;
     }
     
-    const cardId = cardIds[0];
-    if (!jpdbData.cards || !jpdbData.cards[cardId]) {
-      console.warn("No card data for card", cardId);
-      return;
+    // Since local card data exists, hide the website's native sentence, audio, and translation.
+    removeExistingContent();
+    
+    // Remove any existing media block (if reloading)
+    const existingMediaBlock = document.getElementById("jpdb-media-block");
+    if (existingMediaBlock) {
+      existingMediaBlock.remove();
     }
     
-    const cardData = jpdbData.cards[cardId];
-    console.log("Retrieved card data for vid", vid, ":", cardData);
-    
-    const contextText = cardData.context;
-    const rawImage = cardData.image;
-    const rawAudio = cardData.audio;
-    
-    // Normalize filenames in case they include HTML tags or [sound:...] markers.
-    const imageFilename = normalizeFilename(rawImage);
-    const audioFilename = normalizeFilename(rawAudio);
-    
-    // Fetch media files via the background service worker.
-    const imageData = imageFilename ? await fetchMediaFile(imageFilename) : null;
-    const audioData = audioFilename ? await fetchMediaFile(audioFilename) : null;
-    
-    // Build the media block container.
+    // Create the media block container
     const mediaBlock = document.createElement("div");
     mediaBlock.id = "jpdb-media-block";
     mediaBlock.style.marginTop = "10px";
@@ -185,88 +191,210 @@ async function insertMediaInReview() {
     mediaBlock.style.flexDirection = "column";
     mediaBlock.style.alignItems = "center";
     
-    // Create a container for the context sentence and the audio button.
-    if (contextText) {
-      // Filter context text to extract only Japanese characters.
-      const matches = contextText.match(/[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\uFF00-\uFFEF\u4E00-\u9FAF]+/g);
-      const filteredContext = matches ? matches.join(" ") : contextText;
-      
-      const contextContainer = document.createElement("div");
-      contextContainer.style.display = "flex";
-      contextContainer.style.alignItems = "center";
-      contextContainer.style.marginTop = "10px";
-      
-      // Create the context text element with the site's sentence style.
-      const contextElem = document.createElement("div");
-      contextElem.className = "sentence"; // assumes website styles this class appropriately
-      contextElem.style.flex = "1";
-      contextElem.innerText = filteredContext;
-      contextContainer.appendChild(contextElem);
-      
-      // If audio data exists, create a button next to the context.
-      if (audioData) {
-        // Create hidden audio element if not already created.
-        let audioElem = document.getElementById("jpdb-audio");
-        if (!audioElem) {
-          audioElem = document.createElement("audio");
-          audioElem.id = "jpdb-audio";
-          const mimeAudio = getMimeType(audioFilename);
-          audioElem.src = `data:${mimeAudio};base64,${audioData}`;
-          audioElem.style.display = "none";
-          mediaBlock.appendChild(audioElem);
-        }
-        
-        // Clone an existing audio button from the page for styling, or create one.
-        let templateBtn = document.querySelector("a.icon-link.vocabulary-audio");
-        let audioBtn;
-        if (templateBtn) {
-          audioBtn = templateBtn.cloneNode(true);
-        } else {
-          audioBtn = document.createElement("a");
-          audioBtn.className = "icon-link vocabulary-audio";
-          audioBtn.innerHTML = '<i class="ti ti-volume"></i>';
-        }
-        audioBtn.style.marginLeft = "10px";
-        audioBtn.addEventListener("click", (e) => {
-          e.preventDefault();
-          const audio = document.getElementById("jpdb-audio");
-          if (audio) {
-            audio.play();
-          }
-        });
-        contextContainer.appendChild(audioBtn);
-      }
-      
-      mediaBlock.appendChild(contextContainer);
+    // Create an image container for the image and toggle buttons
+    const imageContainer = document.createElement("div");
+    imageContainer.style.position = "relative";
+    imageContainer.style.display = "flex";
+    imageContainer.style.justifyContent = "center";
+    imageContainer.style.alignItems = "center";
+    imageContainer.style.width = "100%";
+    
+    // Create the image element and reduce its size by 20%
+    const imgElem = document.createElement("img");
+    imgElem.alt = "Vocabulary Image";
+    // Previously maxWidth was "80%"; reducing by 20% gives "64%"
+    imgElem.style.maxWidth = "64%";
+    imgElem.style.transition = "opacity 0.3s";
+    
+    // Create left and right toggle buttons with triangle icons.
+    // They have no extra shadow, only the triangle.
+    const btnStyle = {
+      position: "absolute",
+      top: "50%",
+      transform: "translateY(-50%)",
+      background: "transparent",
+      border: "none",
+      color: "#007BFF", // blue same as the audio button when active
+      fontSize: "24px",
+      cursor: "pointer",
+      boxShadow: "none",
+      outline: "none"
+    };
+    
+    const leftButton = document.createElement("button");
+    leftButton.innerHTML = "&#9664;"; // left-pointing triangle
+    Object.assign(leftButton.style, btnStyle, { left: "10px" });
+    
+    const rightButton = document.createElement("button");
+    rightButton.innerHTML = "&#9654;"; // right-pointing triangle
+    Object.assign(rightButton.style, btnStyle, { right: "10px" });
+    
+    // If there's only one card, grey out the buttons and disable clicking.
+    if (cardIds.length < 2) {
+      leftButton.style.color = "grey";
+      rightButton.style.color = "grey";
+      leftButton.style.cursor = "default";
+      rightButton.style.cursor = "default";
+      leftButton.style.pointerEvents = "none";
+      rightButton.style.pointerEvents = "none";
     }
     
-    // Insert the image (with reduced size) below the context.
-    if (imageData) {
-      const mimeImg = getMimeType(imageFilename);
-      const imgElem = document.createElement("img");
-      imgElem.src = `data:${mimeImg};base64,${imageData}`;
-      imgElem.alt = "Vocabulary Image";
-      imgElem.style.maxWidth = "80%"; // reduced size
-      imgElem.style.marginTop = "10px";
-      mediaBlock.appendChild(imgElem);
-    }
+    imageContainer.appendChild(leftButton);
+    imageContainer.appendChild(imgElem);
+    imageContainer.appendChild(rightButton);
     
-    // Insert the media block into the review page.
+    // Create a container for the context (Japanese and English text, audio)
+    const contextElem = document.createElement("div");
+    contextElem.style.display = "flex";
+    contextElem.style.flexDirection = "column";
+    contextElem.style.marginTop = "10px";
+    
+    // Append image container and context element to the media block
+    mediaBlock.appendChild(imageContainer);
+    mediaBlock.appendChild(contextElem);
+    
+    // Find insertion point and insert the media block
     let vocabElem = document.querySelector("div.plain a.plain[href*='/vocabulary/']");
     if (vocabElem && vocabElem.parentElement && vocabElem.parentElement.parentElement) {
-      vocabElem.parentElement.parentElement.insertBefore(
-        mediaBlock,
-        vocabElem.parentElement.nextSibling
-      );
+      const targetParent = vocabElem.parentElement.parentElement;
+      targetParent.insertBefore(mediaBlock, vocabElem.parentElement.nextSibling);
       console.log("Media block inserted into review page.");
     } else {
       console.warn("Vocabulary element not found; appending media block to body.");
       document.body.appendChild(mediaBlock);
     }
+    
+    // Set up card toggling
+    let currentCardIndex = 0;
+    
+    // Function to load and display a card based on the current index
+    async function loadCard(index) {
+      const cardId = cardIds[index];
+      if (!jpdbData.cards || !jpdbData.cards[cardId]) {
+        console.warn("No card data for card", cardId);
+        return;
+      }
+      
+      const cardData = jpdbData.cards[cardId];
+      console.log("Loading card data for vid", vid, "card", cardId, "at index", index);
+      
+      // Update context text
+      const contextText = cardData.context;
+      let japaneseText = "";
+      let englishText = "";
+      if (contextText) {
+        // Extract Japanese text
+        const japaneseMatches = contextText.match(/[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\uFF00-\uFFEF\u4E00-\u9FAF]+/g);
+        japaneseText = japaneseMatches ? japaneseMatches.join(" ") : "";
+        
+        // Extract English text
+        const englishMatches = contextText.match(/[^\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\uFF00-\uFFEF\u4E00-\u9FAF]+/g);
+        englishText = englishMatches ? englishMatches.join(" ") : "";
+        englishText = englishText.replace(/<br>/g, " ").trim();
+      }
+      
+      // Clear previous context and rebuild it
+      contextElem.innerHTML = "";
+      const jpContainer = document.createElement("div");
+      jpContainer.style.display = "flex";
+      jpContainer.style.alignItems = "baseline";
+      jpContainer.style.columnGap = "0.25rem";
+      jpContainer.className = "card-sentence";
+      
+      // Audio: normalize and fetch if available
+      const rawAudio = cardData.audio;
+      const audioFilename = normalizeFilename(rawAudio);
+      if (audioFilename) {
+        const audioData = await fetchMediaFile(audioFilename);
+        if (audioData) {
+          let audioElem = document.getElementById("jpdb-audio");
+          if (!audioElem) {
+            audioElem = document.createElement("audio");
+            audioElem.id = "jpdb-audio";
+            const mimeAudio = getMimeType(audioFilename);
+            audioElem.src = `data:${mimeAudio};base64,${audioData}`;
+            audioElem.style.display = "none";
+          }
+          
+          // Create audio button (blue icon) and mark it with an ID so it won't be removed later
+          const audioBtn = document.createElement("a");
+          audioBtn.id = "jpdb-media-audio";
+          audioBtn.className = "icon-link example-audio";
+          audioBtn.href = "#";
+          audioBtn.innerHTML = '<i class="ti ti-volume"></i>';
+          audioBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            const audio = document.getElementById("jpdb-audio");
+            if (audio) {
+              audio.play();
+            }
+          });
+          
+          const spacer = document.createElement("div");
+          spacer.style.width = "0.5rem";
+          spacer.style.display = "inline-block";
+          
+          jpContainer.appendChild(audioBtn);
+          jpContainer.appendChild(spacer);
+          jpContainer.appendChild(audioElem);
+        }
+      }
+      
+      const jpSentence = document.createElement("div");
+      jpSentence.className = "sentence";
+      jpSentence.style.marginLeft = "0.3rem";
+      jpSentence.innerText = japaneseText;
+      jpContainer.appendChild(jpSentence);
+      contextElem.appendChild(jpContainer);
+      
+      if (englishText) {
+        const translationContainer = document.createElement("div");
+        translationContainer.style.display = "flex";
+        translationContainer.style.justifyContent = "center";
+        
+        const translationDiv = document.createElement("div");
+        translationDiv.className = "sentence-translation";
+        translationDiv.innerText = englishText;
+        
+        translationContainer.appendChild(translationDiv);
+        contextElem.appendChild(translationContainer);
+      }
+      
+      // Update the image
+      const rawImage = cardData.image;
+      const imageFilename = normalizeFilename(rawImage);
+      if (imageFilename) {
+        const imageData = await fetchMediaFile(imageFilename);
+        if (imageData) {
+          const mimeImg = getMimeType(imageFilename);
+          // Optionally add a fade transition when updating the image
+          imgElem.style.opacity = 0;
+          setTimeout(() => {
+            imgElem.src = `data:${mimeImg};base64,${imageData}`;
+            imgElem.style.opacity = 1;
+          }, 150);
+        } else {
+          imgElem.src = "";
+        }
+      } else {
+        imgElem.src = "";
+      }
+    }
+    
+    // Initial load of the first card
+    loadCard(currentCardIndex);
+    
+    // Set up button event listeners for toggling
+    leftButton.addEventListener("click", () => {
+      currentCardIndex = (currentCardIndex - 1 + cardIds.length) % cardIds.length;
+      loadCard(currentCardIndex);
+    });
+    rightButton.addEventListener("click", () => {
+      currentCardIndex = (currentCardIndex + 1) % cardIds.length;
+      loadCard(currentCardIndex);
+    });
   });
 }
-
-  
 
 // Run on initial load.
 function init() {
