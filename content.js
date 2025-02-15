@@ -65,32 +65,6 @@ function getMimeType(filename) {
   return "application/octet-stream";
 }
 
-// Normalize the stored filename.
-// If it contains an <img> tag, extract its src attribute.
-// If it starts with "[sound:" and ends with "]", strip those markers.
-function normalizeFilename(filename) {
-  if (!filename) return filename;
-  
-  if (filename.includes("<img")) {
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = filename;
-    const img = tempDiv.querySelector('img');
-    if (img) {
-      const src = img.getAttribute('src');
-      console.log("Normalized image filename from HTML:", src);
-      return src;
-    }
-  }
-  
-  if (filename.startsWith("[sound:") && filename.endsWith("]")) {
-    const clean = filename.slice(7, -1);
-    console.log("Normalized audio filename from [sound:]:", clean);
-    return clean;
-  }
-  
-  console.log("Filename already normalized:", filename);
-  return filename;
-}
 
 // Retrieve the Anki Connect URL from storage or use default.
 function getAnkiUrl() {
@@ -267,6 +241,64 @@ async function insertMediaInReview() {
     // Set up card toggling
     let currentCardIndex = 0;
     
+    async function getTokensForContext(contextText) {
+      // Retrieve the API key from chrome.storage.
+      const apiKey = await new Promise((resolve, reject) => {
+        chrome.storage.local.get("jpdbApiKey", (data) => {
+          if (data.jpdbApiKey) {
+            resolve(data.jpdbApiKey);
+          } else {
+            reject(new Error("JPDB API key not found in storage."));
+          }
+        });
+      }).catch((error) => {
+        console.error(error);
+        return null;
+      });
+
+      if (!apiKey) {
+        // Return empty tokens if no API key is found.
+        return { tokens: [], vocabulary: [] };
+      }
+
+      const jpdbUrl = "https://jpdb.io/api/v1/parse";
+      try {
+        const response = await fetch(jpdbUrl, {
+          method: "POST",
+          headers: {
+            "Accept": "application/json",
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            text: contextText,
+            token_fields: [
+              "vocabulary_index",
+              "position",
+              "length",
+              "furigana"
+            ],
+            position_length_encoding: "utf16",
+            vocabulary_fields: [
+              "vid",
+              "sid",
+              "rid",
+              "spelling",
+              "reading",
+              "frequency_rank",
+              "meanings"
+            ]
+          })
+        });
+        const data = await response.json();
+        return { tokens: data.tokens || [], vocabulary: data.vocabulary || [] };
+      } catch (error) {
+        console.error("Error fetching tokens from JPDB API:", error);
+        return { tokens: [], vocabulary: [] };
+      }
+    }
+
+
     // Function to load and display a card based on the current index
     async function loadCard(index) {
       const cardId = cardIds[index];
@@ -278,75 +310,114 @@ async function insertMediaInReview() {
       const cardData = jpdbData.cards[cardId];
       console.log("Loading card data for vid", vid, "card", cardId, "at index", index);
       
-      // Update context text
+      // Get the full context text from the card.
       const contextText = cardData.context;
-      let japaneseText = "";
+      
+      // Dynamically fetch token data from JPDB API for the current context.
+      let tokenData = { tokens: [], vocabulary: [] };
+      if (contextText) {
+        tokenData = await getTokensForContext(contextText);
+      }
+      const tokens = tokenData.tokens;
+      const vocabulary = tokenData.vocabulary;
+      
+      // Build the highlighted context HTML using the fetched tokens.
+      let contextHtml = "";
+      if (contextText) {
+        if (tokens.length > 0) {
+          // Loop through each token and check if its vocabulary id matches the current vid.
+          for (let token of tokens) {
+            const startPos = token[1];    // starting UTF-16 index
+            const tokenLength = token[2]; // length of the token
+            const tokenText = contextText.substring(startPos, startPos + tokenLength);
+            
+            // If additional info is present (assumed at token[3]), check the vocabulary entry.
+            if (token[3] !== null) {
+              const vocabEntry = vocabulary[token[0]];
+              if (vocabEntry) {
+                const tokenVid = String(vocabEntry[0]);
+                // Only highlight if the token's vocabulary id matches the current vid.
+                if (tokenVid === String(vid)) {
+                  contextHtml += `<span style="color: #4b8dff; font-weight: bold;">${tokenText}</span>`;
+                } else {
+                  contextHtml += tokenText;
+                }
+              } else {
+                contextHtml += tokenText;
+              }
+            } else {
+              contextHtml += tokenText;
+            }
+          }
+        } else {
+          // Fallback: if no tokens are returned, use the plain context text.
+          contextHtml = contextText;
+        }
+      }
+      
+      // Extract English text using regex (this part remains unchanged).
       let englishText = "";
       if (contextText) {
-        // Extract Japanese text
-        const japaneseMatches = contextText.match(/[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\uFF00-\uFFEF\u4E00-\u9FAF]+/g);
-        japaneseText = japaneseMatches ? japaneseMatches.join(" ") : "";
-        
-        // Extract English text
         const englishMatches = contextText.match(/[^\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\uFF00-\uFFEF\u4E00-\u9FAF]+/g);
         englishText = englishMatches ? englishMatches.join(" ") : "";
         englishText = englishText.replace(/<br>/g, " ").trim();
       }
       
-      // Clear previous context and rebuild it
+      // Clear previous content and rebuild the context element.
       contextElem.innerHTML = "";
       const jpContainer = document.createElement("div");
       jpContainer.style.display = "flex";
       jpContainer.style.alignItems = "baseline";
       jpContainer.style.columnGap = "0.25rem";
       jpContainer.className = "card-sentence";
-      
-      // Audio: normalize and fetch if available
-      const rawAudio = cardData.audio;
-      const audioFilename = normalizeFilename(rawAudio);
-      if (audioFilename) {
-        const audioData = await fetchMediaFile(audioFilename);
-        if (audioData) {
-          let audioElem = document.getElementById("jpdb-audio");
-          if (!audioElem) {
-            audioElem = document.createElement("audio");
-            audioElem.id = "jpdb-audio";
-            const mimeAudio = getMimeType(audioFilename);
-            audioElem.src = `data:${mimeAudio};base64,${audioData}`;
-            audioElem.style.display = "none";
-          }
-          
-          // Create audio button (blue icon) and mark it with an ID so it won't be removed later
-          const audioBtn = document.createElement("a");
-          audioBtn.id = "jpdb-media-audio";
-          audioBtn.className = "icon-link example-audio";
-          audioBtn.href = "#";
-          audioBtn.innerHTML = '<i class="ti ti-volume"></i>';
-          audioBtn.addEventListener("click", (e) => {
-            e.preventDefault();
-            const audio = document.getElementById("jpdb-audio");
-            if (audio) {
-              audio.play();
-            }
-          });
-          
-          const spacer = document.createElement("div");
-          spacer.style.width = "0.5rem";
-          spacer.style.display = "inline-block";
-          
-          jpContainer.appendChild(audioBtn);
-          jpContainer.appendChild(spacer);
-          jpContainer.appendChild(audioElem);
-        }
+
+            // --- Audio Section ---
+  const audioFilename = cardData.audio;
+  if (audioFilename) {
+    const audioData = await fetchMediaFile(audioFilename);
+    if (audioData) {
+      let audioElem = document.getElementById("jpdb-audio");
+      if (!audioElem) {
+        audioElem = document.createElement("audio");
+        audioElem.id = "jpdb-audio";
+        const mimeAudio = getMimeType(audioFilename);
+        audioElem.src = `data:${mimeAudio};base64,${audioData}`;
+        audioElem.style.display = "none";
       }
       
+      // Create audio button with the updated arrow color (#4b8dff).
+      const audioBtn = document.createElement("a");
+      audioBtn.id = "jpdb-media-audio";
+      audioBtn.className = "icon-link example-audio";
+      audioBtn.href = "#";
+      audioBtn.innerHTML = '<i class="ti ti-volume" style="color: #4b8dff;"></i>';
+      audioBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const audio = document.getElementById("jpdb-audio");
+        if (audio) {
+          audio.play();
+        }
+      });
+      
+      const spacer = document.createElement("div");
+      spacer.style.width = "0.5rem";
+      spacer.style.display = "inline-block";
+      
+      jpContainer.appendChild(audioBtn);
+      jpContainer.appendChild(spacer);
+      jpContainer.appendChild(audioElem);
+    }
+  }
+      
+      // --- Japanese Context Sentence ---
       const jpSentence = document.createElement("div");
       jpSentence.className = "sentence";
       jpSentence.style.marginLeft = "0.3rem";
-      jpSentence.innerText = japaneseText;
+      jpSentence.innerHTML = contextHtml;
       jpContainer.appendChild(jpSentence);
       contextElem.appendChild(jpContainer);
       
+      // --- English Translation ---
       if (englishText) {
         const translationContainer = document.createElement("div");
         translationContainer.style.display = "flex";
@@ -359,20 +430,18 @@ async function insertMediaInReview() {
         translationContainer.appendChild(translationDiv);
         contextElem.appendChild(translationContainer);
       }
-      
-      // Update the image
-      const rawImage = cardData.image;
-      const imageFilename = normalizeFilename(rawImage);
+      // --- Image Section ---
+      const imageFilename = cardData.image;
       if (imageFilename) {
         const imageData = await fetchMediaFile(imageFilename);
         if (imageData) {
           const mimeImg = getMimeType(imageFilename);
-          // Optionally add a fade transition when updating the image
+          // Optionally add a fade transition when updating the image.
           imgElem.style.opacity = 0;
           setTimeout(() => {
             imgElem.src = `data:${mimeImg};base64,${imageData}`;
             imgElem.style.opacity = 1;
-          }, 150);
+          }, 50);
         } else {
           imgElem.src = "";
         }
@@ -380,6 +449,9 @@ async function insertMediaInReview() {
         imgElem.src = "";
       }
     }
+
+
+    
     
     // Initial load of the first card
     loadCard(currentCardIndex);

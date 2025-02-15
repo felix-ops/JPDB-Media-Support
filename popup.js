@@ -78,6 +78,15 @@ async function fetchDecks() {
       if (data.result.length === 0) {
         deckSelect.innerHTML = '<option value="">-- No decks found --</option>';
       }
+      
+      // Retrieve the stored deck value and select it if it exists.
+      chrome.storage.local.get('selectedDeck', (storedData) => {
+        if (storedData.selectedDeck) {
+          deckSelect.value = storedData.selectedDeck;
+          // Optionally, trigger change event if needed
+          deckSelect.dispatchEvent(new Event('change'));
+        }
+      });
     } else {
       deckSelect.innerHTML = '<option value="">-- No decks found --</option>';
     }
@@ -86,6 +95,7 @@ async function fetchDecks() {
     console.error('Error fetching decks:', error);
   }
 }
+
 
 /**
  * Load cards for the selected deck using findCards and cardsInfo.
@@ -121,7 +131,6 @@ async function loadCardsAndFields() {
       })
     });
     const findCardsData = await findCardsResponse.json();
-    console.log("findCards response:", findCardsData);
     if (!findCardsData.result || findCardsData.result.length === 0) {
       alert('No cards found in the selected deck.');
       return;
@@ -139,7 +148,6 @@ async function loadCardsAndFields() {
       })
     });
     const cardsInfoData = await cardsInfoResponse.json();
-    console.log("cardsInfo response:", cardsInfoData);
     if (!cardsInfoData.result || cardsInfoData.result.length === 0) {
       alert('Failed to retrieve card information.');
       return;
@@ -150,13 +158,36 @@ async function loadCardsAndFields() {
     // Populate the field dropdowns using fields from the first card (assumes uniformity)
     const firstCard = fetchedCards[0];
     const fieldNames = Object.keys(firstCard.fields);
+    
+    // Context field dropdown
     populateFieldDropdown('contextFieldSelect', fieldNames);
+    chrome.storage.local.get('selectedContextField', (data) => {
+      if (data.selectedContextField) {
+        document.getElementById('contextFieldSelect').value = data.selectedContextField;
+      }
+    });
+    
+    // Image field dropdown
     populateFieldDropdown('imageFieldSelect', fieldNames);
+    chrome.storage.local.get('selectedImageField', (data) => {
+      if (data.selectedImageField) {
+        document.getElementById('imageFieldSelect').value = data.selectedImageField;
+      }
+    });
+    
+    // Audio field dropdown
     populateFieldDropdown('audioFieldSelect', fieldNames);
+    chrome.storage.local.get('selectedAudioField', (data) => {
+      if (data.selectedAudioField) {
+        document.getElementById('audioFieldSelect').value = data.selectedAudioField;
+      }
+    });
+    
   } catch (error) {
     console.error('Error loading cards:', error);
   }
 }
+
 
 /**
  * Utility to populate a select element with a given list of field names.
@@ -177,7 +208,6 @@ function populateFieldDropdown(selectId, fieldNames) {
  */
 async function getVidsFromContext(contextText) {
   const jpdbUrl = "https://jpdb.io/api/v1/parse";
-  // Use the API key entered by the user
   const token = document.getElementById('jpdbApiKey').value.trim();
   
   try {
@@ -210,14 +240,32 @@ async function getVidsFromContext(contextText) {
     });
     const data = await response.json();
     console.log("JPDB API response:", data);
-    // From the response, extract vocabulary ids.
     if (data.vocabulary && Array.isArray(data.vocabulary)) {
-      return data.vocabulary.map(vocab => String(vocab[0]));
+      const vids = data.vocabulary.map(vocab => String(vocab[0]));
+      return { vids, tokens: data.tokens, vocabulary: data.vocabulary };
     }
   } catch (error) {
     console.error('Error fetching JPDB data:', error);
   }
-  return [];
+  return { vids: [], tokens: [], vocabulary: [] };
+}
+
+function extractImageFilename(imageHTML) {
+  if (!imageHTML) return "";
+  // Create a temporary element to parse the HTML.
+  const tempDiv = document.createElement("div");
+  tempDiv.innerHTML = imageHTML;
+  const img = tempDiv.querySelector("img");
+  return img ? img.getAttribute("src") : imageHTML;
+}
+
+function extractAudioFilename(audioText) {
+  if (!audioText) return "";
+  // If the audio is in the [sound:...] format, remove the markers.
+  if (audioText.startsWith("[sound:") && audioText.endsWith("]")) {
+    return audioText.slice(7, -1);
+  }
+  return audioText;
 }
 
 /**
@@ -230,79 +278,103 @@ async function fetchAndStoreData() {
   const audioField = document.getElementById('audioFieldSelect').value;
   const resultDiv = document.getElementById('result');
   const progressBar = document.getElementById('progressBar');
-  
+
   // Save selected field settings
   saveSetting('selectedContextField', contextField);
   saveSetting('selectedImageField', imageField);
   saveSetting('selectedAudioField', audioField);
-  
+
   if (!contextField || !imageField || !audioField) {
     alert('Please select fields for context, image, and audio.');
     return;
   }
-  
+
   const token = document.getElementById('jpdbApiKey').value.trim();
   if (!token) {
     alert('Please enter a valid JPDB API key.');
     return;
   }
-  
-  let dataJson = {
-    cards: {},
-    vid: {}
-  };
-  
-  progressBar.style.display = 'block';
-  progressBar.value = 0;
-  
-  const totalCards = fetchedCards.length;
-  
-  // Process each card sequentially
-  for (let i = 0; i < totalCards; i++) {
-    const card = fetchedCards[i];
-    const cardId = card.cardId;  // Unique card id
-    const contextText = card.fields[contextField].value.trim();
-    const imageText = card.fields[imageField].value.trim();
-    const audioText = card.fields[audioField].value.trim();
-    
-    // Delay of 0.5 seconds per card
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Get vocabulary ids by calling the JPDB API with the context text.
-    let vids = [];
-    if (contextText) {
-      vids = await getVidsFromContext(contextText);
-    }
-    
-    // Save this card's data
-    dataJson.cards[cardId] = {
-      context: contextText,
-      image: imageText,
-      audio: audioText,
-      vids: vids
-    };
-    
-    // Update the reverse mapping: for each vid, add this card id.
-    vids.forEach(vid => {
-      if (!dataJson.vid[vid]) {
-        dataJson.vid[vid] = { cards: [] };
+
+  // Retrieve existing data from storage
+  chrome.storage.local.get('jpdbData', async (storedData) => {
+    let existingData = storedData.jpdbData || { cards: {}, vid: {} };
+
+    // Initialize a new data object
+    let dataJson = { cards: {}, vid: {} };
+
+    progressBar.style.display = 'block';
+    progressBar.value = 0;
+
+    const totalCards = fetchedCards.length;
+
+    // Process each card sequentially
+    for (let i = 0; i < totalCards; i++) {
+      const card = fetchedCards[i];
+      const cardId = card.cardId;
+      // Extract raw text from the fields
+      const contextText = card.fields[contextField].value.trim();
+      const rawImageText = card.fields[imageField].value.trim();
+      const rawAudioText = card.fields[audioField].value.trim();
+
+      // Extract only the filename from the raw text.
+      const imageFilename = extractImageFilename(rawImageText);
+      const audioFilename = extractAudioFilename(rawAudioText);
+
+      let newCardData;
+
+      // Check if the card exists and its key fields are unchanged
+      if (
+        existingData.cards[cardId] &&
+        existingData.cards[cardId].context === contextText &&
+        existingData.cards[cardId].image === imageFilename &&
+        existingData.cards[cardId].audio === audioFilename
+      ) {
+        // Reuse existing data if unchanged.
+        newCardData = existingData.cards[cardId];
+        console.log(`Card ${cardId} unchanged, skipping JPDB API call.`);
+      } else {
+        // For new or changed cards, wait 500ms and process.
+        await new Promise(resolve => setTimeout(resolve, 500));
+        // Only store vocabulary IDs if needed.
+        const jpdbData = contextText ? await getVidsFromContext(contextText) : { vids: [] };
+        newCardData = {
+          context: contextText,
+          image: imageFilename,
+          audio: audioFilename,
+          vids: jpdbData.vids
+        };
       }
-      dataJson.vid[vid].cards.push(cardId);
+
+      dataJson.cards[cardId] = newCardData;
+      progressBar.value = Math.round(((i + 1) / totalCards) * 100);
+    }
+
+    // Rebuild the reverse mapping for vocabulary IDs based on the updated cards.
+    Object.keys(dataJson.cards).forEach(cardId => {
+      let cardData = dataJson.cards[cardId];
+      cardData.vids.forEach(vid => {
+        if (!dataJson.vid[vid]) {
+          dataJson.vid[vid] = { cards: [] };
+        }
+        if (!dataJson.vid[vid].cards.includes(cardId)) {
+          dataJson.vid[vid].cards.push(cardId);
+        }
+      });
     });
-    
-    // Update progress bar
-    progressBar.value = Math.round(((i + 1) / totalCards) * 100);
-  }
-  
-  // Hide progress bar after completion
-  progressBar.style.display = 'none';
-  
-  // Store the JSON in extension local storage
-  chrome.storage.local.set({ jpdbData: dataJson }, () => {
-    resultDiv.innerText = 'Data fetched and stored successfully!';
-    console.log('Stored data:', dataJson);
+
+    progressBar.style.display = 'none';
+
+    // Store the updated data and display total cards count.
+    chrome.storage.local.set({ jpdbData: dataJson }, () => {
+      resultDiv.innerText = `Data fetched and stored successfully! Total cards: ${totalCards}`;
+      console.log('Stored data:', dataJson);
+    });
   });
 }
+
+
+
+
 
 /**
  * Event Listeners:
@@ -320,3 +392,50 @@ document.getElementById('fetchData').addEventListener('click', fetchAndStoreData
 document.getElementById('jpdbApiKey').addEventListener('change', (e) => {
   saveSetting('jpdbApiKey', e.target.value.trim());
 });
+
+
+// Save entire local storage as a config.json file
+document.getElementById('saveConfigButton').addEventListener('click', () => {
+  chrome.storage.local.get(null, (data) => {
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    
+    // Create a temporary link to trigger the download
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "config.json";
+    document.body.appendChild(a);
+    a.click();
+    
+    // Clean up
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+});
+
+// Trigger file selection when clicking the "Load Config" button
+document.getElementById('loadConfigButton').addEventListener('click', () => {
+  document.getElementById('configFileInput').click();
+});
+
+// Handle the file selection and load configuration
+document.getElementById('configFileInput').addEventListener('change', (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const configData = JSON.parse(e.target.result);
+      chrome.storage.local.set(configData, () => {
+        alert("Configuration loaded successfully!");
+        // Optionally, you may want to refresh the UI after loading config.
+      });
+    } catch(err) {
+      alert("Error parsing configuration file: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+
