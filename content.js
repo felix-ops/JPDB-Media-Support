@@ -65,7 +65,6 @@ function getMimeType(filename) {
   return "application/octet-stream";
 }
 
-
 // Retrieve the Anki Connect URL from storage or use default.
 function getAnkiUrl() {
   return new Promise((resolve) => {
@@ -121,7 +120,7 @@ function removeExistingContent() {
 }
 
 // ------------------------------
-// Main Insertion Function with Card Toggle
+// Main Insertion Function with Card Toggle and Preloading Images
 // ------------------------------
 async function insertMediaInReview() {
   const vid = extractVidFromUrl();
@@ -148,7 +147,30 @@ async function insertMediaInReview() {
       return;
     }
     
-    // Since local card data exists, hide the website's native sentence, audio, and translation.
+    // Preloaded images cache (keyed by cardId)
+    const preloadedImages = {};
+    async function preloadImages() {
+      for (const cardId of cardIds) {
+        const cardData = jpdbData.cards[cardId];
+        if (cardData && cardData.image) {
+          try {
+            const imageData = await fetchMediaFile(cardData.image);
+            if (imageData) {
+              const mimeImg = getMimeType(cardData.image);
+              const blob = base64ToBlob(imageData, mimeImg);
+              const objectUrl = URL.createObjectURL(blob);
+              preloadedImages[cardId] = objectUrl;
+            }
+          } catch (error) {
+            console.error("Error preloading image for card", cardId, error);
+          }
+        }
+      }
+    }
+    // Start preloading images in the background without waiting for completion.
+    preloadImages();
+    
+    // Hide native content from the website.
     removeExistingContent();
     
     // Remove any existing media block (if reloading)
@@ -181,14 +203,13 @@ async function insertMediaInReview() {
     imgElem.style.transition = "opacity 0.3s";
     
     // Create left and right toggle buttons with triangle icons.
-    // They have no extra shadow, only the triangle.
     const btnStyle = {
       position: "absolute",
       top: "50%",
       transform: "translateY(-50%)",
       background: "transparent",
       border: "none",
-      color: "#007BFF", // blue same as the audio button when active
+      color: "#007BFF",
       fontSize: "24px",
       cursor: "pointer",
       boxShadow: "none",
@@ -298,9 +319,32 @@ async function insertMediaInReview() {
       }
     }
 
+    // Helper: Convert a base64 string to a Blob.
+    function base64ToBlob(base64, contentType = '', sliceSize = 512) {
+      const byteCharacters = atob(base64);
+      const byteArrays = [];
+      
+      for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+        const slice = byteCharacters.slice(offset, offset + sliceSize);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+      }
+      
+      return new Blob(byteArrays, { type: contentType });
+    }
 
-    // Function to load and display a card based on the current index
     async function loadCard(index) {
+      // Stop any previous audio playback.
+      let existingAudio = document.getElementById("jpdb-audio");
+      if (existingAudio) {
+        existingAudio.pause();
+        existingAudio.currentTime = 0;
+      }
+
       const cardId = cardIds[index];
       if (!jpdbData.cards || !jpdbData.cards[cardId]) {
         console.warn("No card data for card", cardId);
@@ -310,10 +354,10 @@ async function insertMediaInReview() {
       const cardData = jpdbData.cards[cardId];
       console.log("Loading card data for vid", vid, "card", cardId, "at index", index);
       
-      // Get the full context text from the card.
+      // Extract full context text.
       const contextText = cardData.context;
       
-      // Dynamically fetch token data from JPDB API for the current context.
+      // Fetch token data for highlighting, if available.
       let tokenData = { tokens: [], vocabulary: [] };
       if (contextText) {
         tokenData = await getTokensForContext(contextText);
@@ -321,41 +365,116 @@ async function insertMediaInReview() {
       const tokens = tokenData.tokens;
       const vocabulary = tokenData.vocabulary;
       
-      // Build the highlighted context HTML using the fetched tokens.
-      let contextHtml = "";
+      // Build the highlighted context HTML offscreen.
+      let newContextHtml = "";
       if (contextText) {
         if (tokens.length > 0) {
-          // Loop through each token and check if its vocabulary id matches the current vid.
           for (let token of tokens) {
-            const startPos = token[1];    // starting UTF-16 index
-            const tokenLength = token[2]; // length of the token
+            const startPos = token[1];
+            const tokenLength = token[2];
             const tokenText = contextText.substring(startPos, startPos + tokenLength);
-            
-            // If additional info is present (assumed at token[3]), check the vocabulary entry.
             if (token[3] !== null) {
               const vocabEntry = vocabulary[token[0]];
               if (vocabEntry) {
                 const tokenVid = String(vocabEntry[0]);
-                // Only highlight if the token's vocabulary id matches the current vid.
-                if (tokenVid === String(vid)) {
-                  contextHtml += `<span style="color: #4b8dff; font-weight: bold;">${tokenText}</span>`;
-                } else {
-                  contextHtml += tokenText;
-                }
+                newContextHtml += (tokenVid === String(vid))
+                  ? `<span style="color: #4b8dff; font-weight: bold;">${tokenText}</span>`
+                  : tokenText;
               } else {
-                contextHtml += tokenText;
+                newContextHtml += tokenText;
               }
             } else {
-              contextHtml += tokenText;
+              newContextHtml += tokenText;
             }
           }
         } else {
-          // Fallback: if no tokens are returned, use the plain context text.
-          contextHtml = contextText;
+          newContextHtml = contextText;
         }
       }
       
-      // Extract English text using regex (this part remains unchanged).
+      // Prepare a container for context and audio.
+      const jpContainer = document.createElement("div");
+      jpContainer.style.display = "flex";
+      jpContainer.style.alignItems = "baseline";
+      jpContainer.style.columnGap = "0.25rem";
+      jpContainer.className = "card-sentence";
+      
+      // --- Audio Section ---
+      const audioFilename = cardData.audio;
+      if (audioFilename) {
+        const audioData = await fetchMediaFile(audioFilename);
+        if (audioData) {
+          let audioElem = document.getElementById("jpdb-audio");
+          if (!audioElem) {
+            audioElem = document.createElement("audio");
+            audioElem.id = "jpdb-audio";
+            audioElem.style.display = "none";
+          } else {
+            audioElem.pause();
+            audioElem.currentTime = 0;
+          }
+          const mimeAudio = getMimeType(audioFilename);
+          // Update the source for the current card.
+          audioElem.src = `data:${mimeAudio};base64,${audioData}`;
+          
+          // Create the audio button if it doesn't exist.
+          let audioBtn = document.getElementById("jpdb-media-audio");
+          if (!audioBtn) {
+            audioBtn = document.createElement("a");
+            audioBtn.id = "jpdb-media-audio";
+            audioBtn.className = "icon-link example-audio";
+            audioBtn.href = "#";
+            audioBtn.innerHTML = '<i class="ti ti-volume" style="color: #4b8dff;"></i>';
+            // Clicking the button restarts audio.
+            audioBtn.addEventListener("click", (e) => {
+              e.preventDefault();
+              audioElem.currentTime = 0;
+              audioElem.play().catch(error => console.error("Audio play error:", error));
+            });
+          }
+          
+          const spacer = document.createElement("div");
+          spacer.style.width = "0.5rem";
+          spacer.style.display = "inline-block";
+          
+          // Add the audio controls to our container.
+          jpContainer.appendChild(audioBtn);
+          jpContainer.appendChild(spacer);
+          jpContainer.appendChild(audioElem);
+          
+          // Attempt auto-play if the setting is enabled.
+          chrome.storage.local.get("autoPlayAudio", (settings) => {
+            if (settings.autoPlayAudio && audioElem.paused) {
+              audioElem.play().catch((error) => {
+                if (error.name === "NotAllowedError") {
+                  // If autoplay is blocked, add a one-time click listener to resume playback.
+                  const playAfterInteraction = function() {
+                    audioElem.play().catch(err => console.error("Auto-play after interaction failed:", err));
+                    document.removeEventListener("click", playAfterInteraction);
+                  };
+                  document.addEventListener("click", playAfterInteraction);
+                  console.warn("Auto-play prevented; waiting for user interaction.");
+                } else {
+                  console.error("Audio play error:", error);
+                }
+              });
+            }
+          });
+        }
+      }
+      
+      // --- Japanese Context Sentence ---
+      const jpSentence = document.createElement("div");
+      jpSentence.className = "sentence";
+      jpSentence.style.marginLeft = "0.3rem";
+      jpSentence.innerHTML = newContextHtml;
+      jpContainer.appendChild(jpSentence);
+      
+      // Update the visible context element.
+      contextElem.innerHTML = "";
+      contextElem.appendChild(jpContainer);
+      
+      // --- English Translation ---
       let englishText = "";
       if (contextText) {
         const englishMatches = contextText.match(/[^\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\uFF00-\uFFEF\u4E00-\u9FAF]+/g);
@@ -363,61 +482,6 @@ async function insertMediaInReview() {
         englishText = englishText.replace(/<br>/g, " ").trim();
       }
       
-      // Clear previous content and rebuild the context element.
-      contextElem.innerHTML = "";
-      const jpContainer = document.createElement("div");
-      jpContainer.style.display = "flex";
-      jpContainer.style.alignItems = "baseline";
-      jpContainer.style.columnGap = "0.25rem";
-      jpContainer.className = "card-sentence";
-
-            // --- Audio Section ---
-  const audioFilename = cardData.audio;
-  if (audioFilename) {
-    const audioData = await fetchMediaFile(audioFilename);
-    if (audioData) {
-      let audioElem = document.getElementById("jpdb-audio");
-      if (!audioElem) {
-        audioElem = document.createElement("audio");
-        audioElem.id = "jpdb-audio";
-        const mimeAudio = getMimeType(audioFilename);
-        audioElem.src = `data:${mimeAudio};base64,${audioData}`;
-        audioElem.style.display = "none";
-      }
-      
-      // Create audio button with the updated arrow color (#4b8dff).
-      const audioBtn = document.createElement("a");
-      audioBtn.id = "jpdb-media-audio";
-      audioBtn.className = "icon-link example-audio";
-      audioBtn.href = "#";
-      audioBtn.innerHTML = '<i class="ti ti-volume" style="color: #4b8dff;"></i>';
-      audioBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        const audio = document.getElementById("jpdb-audio");
-        if (audio) {
-          audio.play();
-        }
-      });
-      
-      const spacer = document.createElement("div");
-      spacer.style.width = "0.5rem";
-      spacer.style.display = "inline-block";
-      
-      jpContainer.appendChild(audioBtn);
-      jpContainer.appendChild(spacer);
-      jpContainer.appendChild(audioElem);
-    }
-  }
-      
-      // --- Japanese Context Sentence ---
-      const jpSentence = document.createElement("div");
-      jpSentence.className = "sentence";
-      jpSentence.style.marginLeft = "0.3rem";
-      jpSentence.innerHTML = contextHtml;
-      jpContainer.appendChild(jpSentence);
-      contextElem.appendChild(jpContainer);
-      
-      // --- English Translation ---
       if (englishText) {
         const translationContainer = document.createElement("div");
         translationContainer.style.display = "flex";
@@ -430,28 +494,34 @@ async function insertMediaInReview() {
         translationContainer.appendChild(translationDiv);
         contextElem.appendChild(translationContainer);
       }
+      
       // --- Image Section ---
       const imageFilename = cardData.image;
       if (imageFilename) {
-        const imageData = await fetchMediaFile(imageFilename);
-        if (imageData) {
-          const mimeImg = getMimeType(imageFilename);
-          // Optionally add a fade transition when updating the image.
-          imgElem.style.opacity = 0;
-          setTimeout(() => {
-            imgElem.src = `data:${mimeImg};base64,${imageData}`;
-            imgElem.style.opacity = 1;
-          }, 50);
+        // Use the preloaded image if available.
+        if (preloadedImages[cardId]) {
+          imgElem.src = preloadedImages[cardId];
+          imgElem.style.opacity = 1;
         } else {
-          imgElem.src = "";
+          // Fallback if image wasn't preloaded.
+          const imageData = await fetchMediaFile(imageFilename);
+          if (imageData) {
+            const mimeImg = getMimeType(imageFilename);
+            const blob = base64ToBlob(imageData, mimeImg);
+            const objectUrl = URL.createObjectURL(blob);
+            imgElem.src = objectUrl;
+            imgElem.style.opacity = 1;
+            imgElem.onload = () => {
+              URL.revokeObjectURL(objectUrl);
+            };
+          } else {
+            imgElem.src = "";
+          }
         }
       } else {
         imgElem.src = "";
       }
     }
-
-
-    
     
     // Initial load of the first card
     loadCard(currentCardIndex);

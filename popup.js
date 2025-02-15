@@ -17,7 +17,7 @@ function getMimeType(filename) {
  */
 function loadSettings() {
   chrome.storage.local.get(
-    ['jpdbApiKey', 'selectedDeck', 'selectedContextField', 'selectedImageField', 'selectedAudioField'],
+    ['jpdbApiKey', 'selectedDeck', 'selectedContextField', 'selectedImageField', 'selectedAudioField', 'autoPlayAudio'],
     function(data) {
       if (data.jpdbApiKey) {
         document.getElementById('jpdbApiKey').value = data.jpdbApiKey;
@@ -33,6 +33,9 @@ function loadSettings() {
       }
       if (data.selectedAudioField) {
         document.getElementById('audioFieldSelect').value = data.selectedAudioField;
+      }
+      if (typeof data.autoPlayAudio !== 'undefined') {
+        document.getElementById('autoPlayAudio').checked = data.autoPlayAudio;
       }
     }
   );
@@ -439,3 +442,7 @@ document.getElementById('configFileInput').addEventListener('change', (event) =>
   reader.readAsText(file);
 });
 
+// Save the autoPlayAudio setting when the checkbox is changed.
+document.getElementById('autoPlayAudio').addEventListener('change', (e) => {
+  saveSetting('autoPlayAudio', e.target.checked);
+});

@@ -35,6 +35,7 @@
           "matches": ["https://jpdb.io/review*"],
           "js": ["content.js"],
           "run_at": "document_end"
+          
         }
       ]
 }
