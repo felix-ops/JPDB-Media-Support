@@ -429,7 +429,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const githubButton = document.getElementById("githubButton");
   if (githubButton) {
     githubButton.addEventListener("click", () => {
-      window.open("https://github.com/felix-ops/JPDB-Media-Importer");
+      window.open("https://github.com/felix-ops/JPDB-Media-Support");
     });
   }
 });

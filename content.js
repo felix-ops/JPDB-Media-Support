@@ -145,7 +145,7 @@ function removeExistingContent() {
           existingTranslation.remove();
         }
         existingCardSentence.remove();
-        
+
         // Remove only the audio button that is part of the sentence div
         const audioBtn = existingCardSentence.querySelector("a.icon-link.example-audio:not(#jpdb-media-audio)");
         if (audioBtn) {
@@ -415,6 +415,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     jpContainer.style.alignItems = "center";
     jpContainer.style.columnGap = "0.25rem";
     jpContainer.className = "card-sentence";
+    jpContainer.style.justifyContent = "center";
 
     const audioFilename = cardData.audio;
     if (audioFilename) {
@@ -490,6 +491,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     jpSentence.className = "sentence";
     jpSentence.style.marginLeft = "0.3rem";
     jpSentence.style.fontSize = "22px";
+    jpSentence.style.textAlign = "center";
     jpSentence.innerHTML = newContextHtml;
     jpContainer.appendChild(jpSentence);
 
@@ -509,11 +511,12 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
       const translationContainer = document.createElement("div");
       translationContainer.style.display = "flex";
       translationContainer.style.justifyContent = "center";
-
+    
       const translationDiv = document.createElement("div");
       translationDiv.className = "sentence-translation";
+      translationDiv.style.textAlign = "center"; // Center the text within the div
       translationDiv.innerText = englishText;
-
+    
       translationContainer.appendChild(translationDiv);
       elements.contextElem.appendChild(translationContainer);
     }
