@@ -369,8 +369,9 @@ async function fetchAndStoreData() {
 
     // Store the updated data and display total cards count.
     chrome.storage.local.set({ jpdbData: dataJson }, () => {
+      const resultDiv = document.getElementById('result');
       resultDiv.innerText = `Data fetched and stored successfully! Total cards: ${totalCards}`;
-      console.log('Stored data:', dataJson);
+      resultDiv.style.display = 'block'; // Unhide the result div
     });
   });
 }

@@ -16,8 +16,6 @@
     
     "action": { 
         "default_icon": {
-            "16": "icon.png",
-            "24": "icon.png",
             "32": "icon.png"
         },
         "default_title": "JPDB Media Importer",
@@ -32,7 +30,7 @@
       ],
       "content_scripts": [
         {
-          "matches": ["https://jpdb.io/review*"],
+          "matches": ["https://jpdb.io/review*", "https://jpdb.io/vocabulary*"],
           "js": ["content.js"],
           "run_at": "document_end"
           

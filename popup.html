@@ -2,75 +2,231 @@
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>JPDB Media Importer</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+  <link href="https://fonts.googleapis.com/css?family=Roboto:400,500" rel="stylesheet">
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 10px;
-      width: 320px;
+    /* Global styles */
+    html, body {
+      margin: 1;
+      padding: 5px;
+      background-color: #181818;
+      color: #bbbbbb;
+      font-family: 'Roboto', sans-serif;
     }
-    input, select, button, progress {
+    .container {
       width: 100%;
-      margin: 5px 0;
-      box-sizing: border-box;
+      max-width: 800px;
+      min-width: 400px;
+      margin: 0 auto;
+    }
+    h2 {
+      color: #cccccc;
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 24px;
+    }
+    .form-group {
+      margin-bottom: 15px;
+      color: #888888;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+    input[type="text"],
+    select {
+      width: 100%;
+      padding: 8px;
+      background: none;
+      border: none;
+      border-bottom: 2px solid #bbbbbb;
+      color: #bbbbbb;
       font-size: 14px;
+      outline: none;
+      transition: border-bottom-color 0.3s;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+    }
+    input[type="text"]::placeholder {
+      color: #bbbbbb;
+      opacity: 0.7;
+
+    }
+    input[type="text"]:focus,
+    select:focus {
+      border-bottom-color: #4b8dff;
+    }
+    select:hover {
+      cursor: pointer;
+    }
+    /* Dropdown options themed as much as possible */
+    select option {
+      background-color: #181818;
+      color: #888888; /* Duller option text */
+      font-size: 12px;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      background: none;
+      border: 2px solid #4b8dff;
+      border-radius: 4px;
+      color: #4b8dff;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.3s, color 0.3s;
+      margin-bottom: 15px;
+    }
+    button:hover {
+      background: #4b8dff;
+      color: #181818;
+    }
+    progress {
+      width: 100%;
+      height: 20px;
+      margin-top: 10px;
+      border: 1px solid #4b8dff;
+      background: none;
+      display: none; /* Hidden unless needed */
+    }
+    progress::-webkit-progress-bar {
+      background-color: #181818;
+    }
+    progress::-webkit-progress-value {
+      background-color: #4b8dff;
     }
     #result {
-      margin-top: 10px;
+      /* margin-top: 10px; */
+      padding: 10px;
+      border: 0px solid #4b8dff;
+      color: #888888;
+      border-radius: 4px;
+      font-size: 13px;
       word-break: break-all;
-      max-height: 200px;
-      overflow-y: auto;
-      background: #f7f7f7;
-      padding: 5px;
+      display: none; /* Only show when required */
+    }
+    /* Material-style switch for audio */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 50px;
+      height: 28px;
+      vertical-align: middle;
+      margin-right: 10px;
+    }
+    .switch input { 
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #bbbbbb;
+      transition: 0.4s;
+      border-radius: 34px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 22px;
+      width: 22px;
+      left: 3px;
+      bottom: 3px;
+      background-color: #181818;
+      transition: 0.4s;
+      border-radius: 50%;
+    }
+    input:checked + .slider {
+      background-color: #4b8dff;
+    }
+    input:checked + .slider:before {
+      transform: translateX(22px);
+    }
+    .switch-label {
+      font-size: 12px;
+      vertical-align: middle;
+    }
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    .button-group button {
+      flex: 1;
     }
   </style>
 </head>
 <body>
-  <h2>JPDB Media Importer</h2>
-  
-  <label for="url">Anki Connect URL:</label>
-  <input type="text" id="url" placeholder="http://localhost:8765" value="http://localhost:8765">
-  
-  <label for="deckSelect">Select Deck:</label>
-  <select id="deckSelect">
-    <option value="">-- Loading decks --</option>
-  </select>
-  
-  <label for="contextFieldSelect">Context Field:</label>
-  <select id="contextFieldSelect">
-    <option value="">-- Select context field --</option>
-  </select>
-  
-  <label for="imageFieldSelect">Image Field:</label>
-  <select id="imageFieldSelect">
-    <option value="">-- Select image field --</option>
-  </select>
-  
-  <label for="audioFieldSelect">Audio Field:</label>
-  <select id="audioFieldSelect">
-    <option value="">-- Select audio field --</option>
-  </select>
-  
-  <label for="jpdbApiKey">JPDB API Key:</label>
-  <input type="text" id="jpdbApiKey" placeholder="Enter JPDB API Key" value="">
-  
-  <button id="fetchData">Fetch Data</button>
-  
-  <progress id="progressBar" value="0" max="100" style="width: 100%; display:none;"></progress>
-  
-  <div id="result"></div>
-
-  <label for="autoPlayAudio">
-    <input type="checkbox" id="autoPlayAudio"> Auto Play Audio
-  </label>
-
-  <!-- Export Button -->
-<button id="saveConfigButton">Save Config</button>
-
-<!-- Import Button -->
-<button id="loadConfigButton">Load Config</button>
-<!-- Hidden file input for loading config -->
-<input type="file" id="configFileInput" accept="application/json" style="display:none;">
+  <div class="container">
+    <!-- <h2>JPDB Media Importer</h2> -->
+    
+    <div class="form-group">
+      <label for="url">Anki Connect URL</label>
+      <input type="text" id="url" placeholder="http://localhost:8765" value="http://localhost:8765">
+    </div>
+    
+    <div class="form-group">
+      <label for="deckSelect">Select Deck</label>
+      <select id="deckSelect">
+        <option value="">-- Loading decks --</option>
+      </select>
+    </div>
+    
+    <div class="form-group">
+      <label for="contextFieldSelect">Context Field</label>
+      <select id="contextFieldSelect">
+        <option value="">-- Select context field --</option>
+      </select>
+    </div>
+    
+    <div class="form-group">
+      <label for="imageFieldSelect">Image Field</label>
+      <select id="imageFieldSelect">
+        <option value="">-- Select image field --</option>
+      </select>
+    </div>
+    
+    <div class="form-group">
+      <label for="audioFieldSelect">Audio Field</label>
+      <select id="audioFieldSelect">
+        <option value="">-- Select audio field --</option>
+      </select>
+    </div>
+    
+    <div class="form-group">
+      <label for="jpdbApiKey">JPDB API Key</label>
+      <input type="text" id="jpdbApiKey" placeholder="Enter JPDB API Key" value="">
+    </div>
+    
+    <button id="fetchData">Fetch Data</button>
+    
+    <progress id="progressBar" value="0" max="100"></progress>
+    
+    <div id="result"></div>
+    
+    <div class="form-group">
+      <label class="switch">
+        <input type="checkbox" id="autoPlayAudio">
+        <span class="slider"></span>
+      </label>
+      <span class="switch-label">Auto Play Audio</span>
+    </div>
+    
+    <div class="button-group">
+      <button id="saveConfigButton">Save Config</button>
+      <button id="loadConfigButton">Load Config</button>
+    </div>
+    <input type="file" id="configFileInput" accept="application/json" style="display:none;">
+  </div>
   
   <script src="popup.js"></script>
 </body>
