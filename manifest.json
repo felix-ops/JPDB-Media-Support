@@ -1,8 +1,8 @@
 {
-    "name": "JPDB Media Importer",
-    "short_name": "JPDB Media Importer",
+    "name": "JPDB Media Support",
+    "short_name": "JPDB Media Support",
     "description": "Imports Media from Anki deck",
-    "version": "0.0.1",
+    "version": "0.1",
     "manifest_version": 3,
     "content_security_policy": {
         "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"

@@ -42,7 +42,8 @@
       padding: 8px;
       background: none;
       border: none;
-      border-bottom: 2px solid #bbbbbb;
+      /* Set the default line color for dropdown */
+      border-bottom: 1px solid #888888;
       color: #bbbbbb;
       font-size: 14px;
       outline: none;
@@ -54,14 +55,15 @@
     input[type="text"]::placeholder {
       color: #bbbbbb;
       opacity: 0.7;
-
     }
-    input[type="text"]:focus,
-    select:focus {
-      border-bottom-color: #4b8dff;
-    }
+    /* Change dropdown underline on hover */
     select:hover {
       cursor: pointer;
+      border-bottom-color: #4b8dff;
+    }
+    /* Dropdown focus style can remain if desired */
+    select:focus {
+      border-bottom-color: #4b8dff;
     }
     /* Dropdown options themed as much as possible */
     select option {
@@ -73,7 +75,7 @@
       width: 100%;
       padding: 10px;
       background: none;
-      border: 2px solid #4b8dff;
+      border: 1px solid #4b8dff;
       border-radius: 4px;
       color: #4b8dff;
       font-size: 14px;
@@ -100,7 +102,6 @@
       background-color: #4b8dff;
     }
     #result {
-      /* margin-top: 10px; */
       padding: 10px;
       border: 0px solid #4b8dff;
       color: #888888;
@@ -151,9 +152,17 @@
     input:checked + .slider:before {
       transform: translateX(22px);
     }
+    /* Updated switch label styling */
     .switch-label {
-      font-size: 12px;
-      vertical-align: middle;
+      font-size: 16px; /* Larger text */
+      color: #bbbbbb;
+      margin: 0;
+    }
+    /* Flex container for switch elements */
+    .switch-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     .button-group {
       display: flex;
@@ -163,12 +172,34 @@
     .button-group button {
       flex: 1;
     }
+    /* Custom arrow for dropdown */
+    select {
+      background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='5'%3E%3Cpolygon points='0,0 10,0 5,5' fill='%23888888'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      background-size: 10px 5px;
+      padding-right: 20px;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <!-- <h2>JPDB Media Importer</h2> -->
     
+    <!-- Enable Extension Switch -->
+    <div class="form-group switch-container">
+      <span class="switch-label">Enable Extension</span>
+      <label class="switch">
+        <input type="checkbox" id="extensionEnabled" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div class="form-group">
+      <label for="jpdbApiKey">JPDB API Key</label>
+      <input type="text" id="jpdbApiKey" placeholder="Enter JPDB API Key" value="">
+    </div>
+
     <div class="form-group">
       <label for="url">Anki Connect URL</label>
       <input type="text" id="url" placeholder="http://localhost:8765" value="http://localhost:8765">
@@ -202,23 +233,28 @@
       </select>
     </div>
     
-    <div class="form-group">
-      <label for="jpdbApiKey">JPDB API Key</label>
-      <input type="text" id="jpdbApiKey" placeholder="Enter JPDB API Key" value="">
-    </div>
-    
     <button id="fetchData">Fetch Data</button>
     
     <progress id="progressBar" value="0" max="100"></progress>
     
     <div id="result"></div>
     
-    <div class="form-group">
+    <!-- Auto Play Audio Switch -->
+    <div class="form-group switch-container">
+      <span class="switch-label">Auto Play Audio</span>
       <label class="switch">
         <input type="checkbox" id="autoPlayAudio">
         <span class="slider"></span>
       </label>
-      <span class="switch-label">Auto Play Audio</span>
+    </div>
+    
+    <!-- Hide Native Sentence Switch -->
+    <div class="form-group switch-container">
+      <span class="switch-label">Hide Native Sentence</span>
+      <label class="switch">
+        <input type="checkbox" id="hideNativeSentence" checked>
+        <span class="slider"></span>
+      </label>
     </div>
     
     <div class="button-group">
@@ -226,6 +262,9 @@
       <button id="loadConfigButton">Load Config</button>
     </div>
     <input type="file" id="configFileInput" accept="application/json" style="display:none;">
+
+    <!-- GitHub Page Button (Button only, no inline JS) -->
+    <button id="githubButton">GitHub Page</button>
   </div>
   
   <script src="popup.js"></script>

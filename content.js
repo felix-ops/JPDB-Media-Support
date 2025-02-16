@@ -8,7 +8,7 @@ setInterval(() => {
   if (location.href !== lastUrl) {
     console.log("URL changed from", lastUrl, "to", location.href);
     lastUrl = location.href;
-    init(); // re‑run init when URL changes
+    initIfEnabled(); // re-run if enabled when URL changes
   }
 }, 1000);
 
@@ -16,13 +16,23 @@ setInterval(() => {
 // Utility Functions
 // ------------------------------
 
+// Helper to pause all other audio elements before playing ours.
+function pauseOtherAudios(currentAudio) {
+  const allAudios = document.querySelectorAll("audio");
+  allAudios.forEach((audio) => {
+    if (audio !== currentAudio && !audio.paused) {
+      audio.pause();
+    }
+  });
+}
+
 // For review page, extract vid from URL parameter "c"
 function extractVidFromReviewUrl() {
   const params = new URLSearchParams(window.location.search);
-  const cParam = params.get('c'); // e.g. "vf,1550190,2786244425"
+  const cParam = params.get("c"); // e.g. "vf,1550190,2786244425"
   console.log("Parameter c:", cParam);
   if (cParam) {
-    const parts = cParam.split(',');
+    const parts = cParam.split(",");
     if (parts.length >= 2) {
       const vid = parts[1];
       console.log("Extracted vid from review URL:", vid);
@@ -36,7 +46,6 @@ function extractVidFromReviewUrl() {
 // For vocabulary page, extract vid from the path
 function extractVidFromVocabularyUrl() {
   const parts = location.pathname.split("/");
-  // Expected pattern: /vocabulary/{vid}/...
   if (parts[1] === "vocabulary" && parts[2]) {
     console.log("Extracted vid from vocabulary URL:", parts[2]);
     return parts[2];
@@ -92,7 +101,11 @@ async function fetchMediaFile(filename) {
           console.log(`Fetched media file for "${filename}"`);
           resolve(response.result);
         } else {
-          console.error("Error fetching media file for", filename, response ? response.error : "No response");
+          console.error(
+            "Error fetching media file for",
+            filename,
+            response ? response.error : "No response"
+          );
           resolve(null);
         }
       }
@@ -100,7 +113,7 @@ async function fetchMediaFile(filename) {
   });
 }
 
-function base64ToBlob(base64, contentType = '', sliceSize = 512) {
+function base64ToBlob(base64, contentType = "", sliceSize = 512) {
   const byteCharacters = atob(base64);
   const byteArrays = [];
   for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
@@ -116,32 +129,45 @@ function base64ToBlob(base64, contentType = '', sliceSize = 512) {
 }
 
 // ------------------------------
-// Hide native website content
+// Hide Native Website Content
 // ------------------------------
 function removeExistingContent() {
-  const existingCardSentence = document.querySelector(".card-sentence");
-  if (existingCardSentence) {
-    const existingTranslation = existingCardSentence.nextElementSibling;
-    if (existingTranslation && existingTranslation.querySelector(".sentence-translation")) {
-      existingTranslation.remove();
+  chrome.storage.local.get("hideNativeSentence", (data) => {
+    // Only remove the native sentence if the setting is enabled (default true)
+    if (data.hideNativeSentence !== false) {
+      const existingCardSentence = document.querySelector(".card-sentence");
+      if (existingCardSentence) {
+        const existingTranslation = existingCardSentence.nextElementSibling;
+        if (
+          existingTranslation &&
+          existingTranslation.querySelector(".sentence-translation")
+        ) {
+          existingTranslation.remove();
+        }
+        existingCardSentence.remove();
+        
+        // Remove only the audio button that is part of the sentence div
+        const audioBtn = existingCardSentence.querySelector("a.icon-link.example-audio:not(#jpdb-media-audio)");
+        if (audioBtn) {
+          audioBtn.remove();
+        }
+      }
     }
-    existingCardSentence.remove();
-  }
-  const nativeAudioBtns = document.querySelectorAll("a.icon-link.example-audio:not(#jpdb-media-audio)");
-  nativeAudioBtns.forEach(btn => btn.remove());
+  });
+
 }
 
 // ------------------------------
-// Common Media Block Code (for both review & vocabulary pages)
+// Create Media Block
 // ------------------------------
 function createMediaBlock() {
-  // Create the media block container and inner elements (image container, controls, counter, context)
   const mediaBlock = document.createElement("div");
   mediaBlock.id = "jpdb-media-block";
   mediaBlock.style.marginTop = "10px";
   mediaBlock.style.display = "flex";
   mediaBlock.style.flexDirection = "column";
   mediaBlock.style.alignItems = "center";
+  mediaBlock.style.width = "650px";
 
   const imageContainer = document.createElement("div");
   imageContainer.style.position = "relative";
@@ -152,10 +178,21 @@ function createMediaBlock() {
 
   const imgElem = document.createElement("img");
   imgElem.alt = "Vocabulary Image";
-  imgElem.style.maxWidth = "64%";
+  imgElem.style.maxWidth = "500px";
   imgElem.style.transition = "opacity 0.3s";
-  // For smooth transitions, hide only on first load.
   imgElem.style.display = "none";
+
+  // When the image is clicked, pause other audios and play our audio.
+  imgElem.addEventListener("click", () => {
+    const audioElem = document.getElementById("jpdb-audio");
+    if (audioElem) {
+      pauseOtherAudios(audioElem);
+      audioElem.currentTime = 0;
+      audioElem.play().catch((error) =>
+        console.error("Audio play error:", error)
+      );
+    }
+  });
 
   const btnStyle = {
     position: "absolute",
@@ -178,24 +215,20 @@ function createMediaBlock() {
   rightButton.innerHTML = "&#9654;";
   Object.assign(rightButton.style, btnStyle, { right: "10px" });
 
-  // If only one card, disable buttons.
-  // (This logic can be reused for both pages.)
-  // Counter element:
   const cardCountElem = document.createElement("div");
   cardCountElem.id = "card-count";
   cardCountElem.style.position = "absolute";
   cardCountElem.style.bottom = "5px";
   cardCountElem.style.left = "50%";
   cardCountElem.style.transform = "translateX(-50%)";
-  cardCountElem.style.backgroundColor = "rgba(0,0,0,0.6)"; // your updated style
-  cardCountElem.style.color = "#bbbbbb"; // your updated style
+  cardCountElem.style.backgroundColor = "rgba(0,0,0,0.6)";
+  cardCountElem.style.color = "#bbbbbb";
   cardCountElem.style.padding = "2px 5px";
   cardCountElem.style.borderRadius = "3px";
   cardCountElem.style.fontSize = "14px";
   cardCountElem.style.zIndex = "10";
-  // Initially hide the counter until first image loads.
   cardCountElem.style.display = "none";
-  cardCountElem.innerText = `1/0`; // will update later
+  cardCountElem.innerText = `1/0`;
 
   imageContainer.appendChild(cardCountElem);
   imageContainer.appendChild(leftButton);
@@ -213,13 +246,13 @@ function createMediaBlock() {
   return { mediaBlock, imageContainer, imgElem, leftButton, rightButton, cardCountElem, contextElem };
 }
 
-// The bulk of your media block code (preloading images/audio, toggling, smooth transitions)
-// is the same for both pages. For brevity, we encapsulate it in a common function.
+// ------------------------------
+// Setup Media Block (Preloading, Navigation, etc.)
+// ------------------------------
 function setupMediaBlock(vid, jpdbData, cardIds, elements) {
-  // Cache objects for images and audio.
   const preloadedImages = {};
   const preloadedAudios = {};
-  // Preload images
+
   async function preloadImages() {
     for (const cardId of cardIds) {
       const cardData = jpdbData.cards[cardId];
@@ -240,7 +273,6 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
   }
   preloadImages();
 
-  // Preload audios
   async function preloadAudios() {
     for (const cardId of cardIds) {
       const cardData = jpdbData.cards[cardId];
@@ -260,7 +292,6 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
 
   removeExistingContent();
 
-  // Set up button disable if only one card.
   if (cardIds.length < 2) {
     elements.leftButton.style.color = "grey";
     elements.rightButton.style.color = "grey";
@@ -270,7 +301,6 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     elements.rightButton.style.pointerEvents = "none";
   }
 
-  // Flag variables for smooth transitions.
   let counterShown = false;
   let imageLoadedOnce = false;
   let currentCardIndex = 0;
@@ -296,18 +326,13 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
       const response = await fetch(jpdbUrl, {
         method: "POST",
         headers: {
-          "Accept": "application/json",
-          "Authorization": `Bearer ${apiKey}`,
+          Accept: "application/json",
+          Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
           text: contextText,
-          token_fields: [
-            "vocabulary_index",
-            "position",
-            "length",
-            "furigana"
-          ],
+          token_fields: ["vocabulary_index", "position", "length", "furigana"],
           position_length_encoding: "utf16",
           vocabulary_fields: [
             "vid",
@@ -369,9 +394,10 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
             const vocabEntry = vocabulary[token[0]];
             if (vocabEntry) {
               const tokenVid = String(vocabEntry[0]);
-              newContextHtml += (tokenVid === String(vid))
-                ? `<span style="color: #4b8dff; font-weight: bold;">${tokenText}</span>`
-                : tokenText;
+              newContextHtml +=
+                tokenVid === String(vid)
+                  ? `<span style="color: #4b8dff; font-weight: bold;">${tokenText}</span>`
+                  : tokenText;
             } else {
               newContextHtml += tokenText;
             }
@@ -386,7 +412,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
 
     const jpContainer = document.createElement("div");
     jpContainer.style.display = "flex";
-    jpContainer.style.alignItems = "baseline";
+    jpContainer.style.alignItems = "center";
     jpContainer.style.columnGap = "0.25rem";
     jpContainer.className = "card-sentence";
 
@@ -423,11 +449,13 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
           audioBtn.innerHTML = '<i class="ti ti-volume" style="color: #4b8dff;"></i>';
           audioBtn.addEventListener("click", (e) => {
             e.preventDefault();
+            pauseOtherAudios(audioElem);
             audioElem.currentTime = 0;
-            audioElem.play().catch(error => console.error("Audio play error:", error));
+            audioElem.play().catch((error) =>
+              console.error("Audio play error:", error)
+            );
           });
         }
-
         const spacer = document.createElement("div");
         spacer.style.width = "0.5rem";
         spacer.style.display = "inline-block";
@@ -438,10 +466,13 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
 
         chrome.storage.local.get("autoPlayAudio", (settings) => {
           if (settings.autoPlayAudio && audioElem.paused) {
+            pauseOtherAudios(audioElem);
             audioElem.play().catch((error) => {
               if (error.name === "NotAllowedError") {
-                const playAfterInteraction = function() {
-                  audioElem.play().catch(err => console.error("Auto-play after interaction failed:", err));
+                const playAfterInteraction = function () {
+                  audioElem.play().catch((err) =>
+                    console.error("Auto-play after interaction failed:", err)
+                  );
                   document.removeEventListener("click", playAfterInteraction);
                 };
                 document.addEventListener("click", playAfterInteraction);
@@ -458,6 +489,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     const jpSentence = document.createElement("div");
     jpSentence.className = "sentence";
     jpSentence.style.marginLeft = "0.3rem";
+    jpSentence.style.fontSize = "22px";
     jpSentence.innerHTML = newContextHtml;
     jpContainer.appendChild(jpSentence);
 
@@ -466,7 +498,9 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
 
     let englishText = "";
     if (contextText) {
-      const englishMatches = contextText.match(/[^\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\uFF00-\uFFEF\u4E00-\u9FAF]+/g);
+      const englishMatches = contextText.match(
+        /[^\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\uFF00-\uFFEF\u4E00-\u9FAF]+/g
+      );
       englishText = englishMatches ? englishMatches.join(" ") : "";
       englishText = englishText.replace(/<br>/g, " ").trim();
     }
@@ -484,17 +518,15 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
       elements.contextElem.appendChild(translationContainer);
     }
 
-    // --- Image Section ---
     const imageFilename = cardData.image;
     if (imageFilename) {
-      // For first load, hide image and counter until loaded.
       if (!imageLoadedOnce) {
         elements.imgElem.style.display = "none";
         elements.cardCountElem.style.display = "none";
       }
       if (preloadedImages[cardId]) {
         if (!imageLoadedOnce) {
-          elements.imgElem.onload = function() {
+          elements.imgElem.onload = function () {
             elements.imgElem.style.display = "";
             if (!counterShown) {
               elements.cardCountElem.style.display = "";
@@ -502,21 +534,20 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
             }
             imageLoadedOnce = true;
           };
-          elements.imgElem.onerror = function() {
+          elements.imgElem.onerror = function () {
             elements.imgElem.style.display = "none";
-            if (!counterShown) elements.cardCountElem.style.display = "none";
+            if (!counterShown)
+              elements.cardCountElem.style.display = "none";
           };
           elements.imgElem.src = preloadedImages[cardId];
           elements.imgElem.style.opacity = 1;
         } else {
           let tempImg = new Image();
-          tempImg.onload = function() {
+          tempImg.onload = function () {
             elements.imgElem.src = preloadedImages[cardId];
             elements.imgElem.style.opacity = 1;
           };
-          tempImg.onerror = function() {
-            // Leave current image unchanged.
-          };
+          tempImg.onerror = function () {};
           tempImg.src = preloadedImages[cardId];
         }
       } else {
@@ -526,7 +557,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
           const blob = base64ToBlob(imageData, mimeImg);
           const objectUrl = URL.createObjectURL(blob);
           if (!imageLoadedOnce) {
-            elements.imgElem.onload = function() {
+            elements.imgElem.onload = function () {
               elements.imgElem.style.display = "";
               if (!counterShown) {
                 elements.cardCountElem.style.display = "";
@@ -535,22 +566,21 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
               imageLoadedOnce = true;
               URL.revokeObjectURL(objectUrl);
             };
-            elements.imgElem.onerror = function() {
+            elements.imgElem.onerror = function () {
               elements.imgElem.style.display = "none";
-              if (!counterShown) elements.cardCountElem.style.display = "none";
+              if (!counterShown)
+                elements.cardCountElem.style.display = "none";
             };
             elements.imgElem.src = objectUrl;
             elements.imgElem.style.opacity = 1;
           } else {
             let tempImg = new Image();
-            tempImg.onload = function() {
+            tempImg.onload = function () {
               elements.imgElem.src = objectUrl;
               elements.imgElem.style.opacity = 1;
               URL.revokeObjectURL(objectUrl);
             };
-            tempImg.onerror = function() {
-              // Do nothing.
-            };
+            tempImg.onerror = function () {};
             tempImg.src = objectUrl;
           }
         } else {
@@ -566,7 +596,6 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     }
   }
 
-  // Initial load.
   loadCard(currentCardIndex);
 
   elements.leftButton.addEventListener("click", () => {
@@ -592,18 +621,24 @@ async function insertMediaInReview() {
     const cardIds = jpdbData.vid[vid].cards;
     if (!cardIds || cardIds.length === 0) return;
 
-    // Create the media block elements.
     const elements = createMediaBlock();
-    // Insert the block into the page.
-    // (Assuming review page insertion logic already exists.)
-    let vocabElem = document.querySelector("div.plain a.plain[href*='/vocabulary/']");
-    if (vocabElem && vocabElem.parentElement && vocabElem.parentElement.parentElement) {
-      const targetParent = vocabElem.parentElement.parentElement;
-      targetParent.insertBefore(elements.mediaBlock, vocabElem.parentElement.nextSibling);
+    const mainContent = document.querySelector(".result.vocabulary .vbox.gap");
+    if (mainContent) {
+      const wrapper = document.createElement("div");
+      wrapper.style.display = "flex";
+      wrapper.style.flexDirection = "row";
+      wrapper.style.alignItems = "flex-start";
+      wrapper.style.width = "100%";
+
+      mainContent.parentNode.insertBefore(wrapper, mainContent);
+      wrapper.appendChild(mainContent);
+      mainContent.style.flex = "1";
+      wrapper.appendChild(elements.mediaBlock);
+      elements.mediaBlock.style.marginLeft = "40px";
     } else {
       document.body.appendChild(elements.mediaBlock);
     }
-    // Set up the media block behavior.
+
     setupMediaBlock(vid, jpdbData, cardIds, elements);
   });
 }
@@ -622,7 +657,6 @@ async function insertMediaInVocabularyPage() {
     if (!cardIds || cardIds.length === 0) return;
 
     const elements = createMediaBlock();
-    // For vocabulary page, insert the media block above the meanings section.
     const meaningsElem = document.querySelector(".subsection-meanings");
     if (meaningsElem && meaningsElem.parentElement) {
       meaningsElem.parentElement.insertBefore(elements.mediaBlock, meaningsElem);
@@ -634,11 +668,10 @@ async function insertMediaInVocabularyPage() {
 }
 
 // ------------------------------
-// Init: Determine which page we are on and insert the media block accordingly
+// Init: Determine Page Type and Insert Media Block
 // ------------------------------
 function init() {
   console.log("Running init() for JPDB content script.");
-  // If URL path contains "/vocabulary/" but not the review page indicator, assume vocabulary page.
   if (location.pathname.includes("/vocabulary/") && !location.search.includes("c=")) {
     insertMediaInVocabularyPage();
   } else {
@@ -646,8 +679,19 @@ function init() {
   }
 }
 
+// Check if the extension is enabled before running modifications.
+function initIfEnabled() {
+  chrome.storage.local.get("extensionEnabled", (data) => {
+    if (data.extensionEnabled === false) {
+      console.log("Extension disabled; skipping modifications.");
+      return;
+    }
+    init();
+  });
+}
+
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", init);
+  document.addEventListener("DOMContentLoaded", initIfEnabled);
 } else {
-  init();
+  initIfEnabled();
 }
