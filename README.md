@@ -23,7 +23,7 @@ https://github.com/user-attachments/assets/015ffdb5-ca37-458b-8345-2e13f8a0863a
 ## Requirements
 To start using this extension, make sure you have the following:
 
-1. **JPDB API Key** (Required for interacting with JPDB)
+1. **JPDB API Key** Required for interacting with JPDB (Don't use the same API key shown in the Video, use the one available in your JPDB settings page !!!)
 2. **Anki** (Installed on your computer)
 3. **Anki Connect Addon** (Installed in Anki)
 4. **Anki Deck** (Containing the media files you want to integrate with JPDB)
