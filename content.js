@@ -146,8 +146,9 @@ function base64ToBlob(base64, contentType = "", sliceSize = 512) {
 function removeExistingContent() {
   getSetting("hideNativeSentence", true).then((hide) => {
     if (hide !== false) {
-      const existingCardSentence = document.querySelector(".card-sentence");
+      const existingCardSentence = document.querySelector(".card-sentence:not(.jpdb-inserted)");
       if (existingCardSentence) {
+        // remove native sentence elements only
         const existingTranslation = existingCardSentence.nextElementSibling;
         if (
           existingTranslation &&
@@ -156,8 +157,7 @@ function removeExistingContent() {
           existingTranslation.remove();
         }
         existingCardSentence.remove();
-
-        // Remove only the audio button that is part of the sentence div
+  
         const audioBtn = existingCardSentence.querySelector("a.icon-link.example-audio:not(#jpdb-media-audio)");
         if (audioBtn) {
           audioBtn.remove();
@@ -384,9 +384,10 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     jpContainer.style.display = "flex";
     jpContainer.style.alignItems = "center";
     jpContainer.style.columnGap = "0.25rem";
-    jpContainer.className = "card-sentence";
+    jpContainer.classList.add("card-sentence", "jpdb-inserted");
     jpContainer.style.justifyContent = "center";
 
+    
     if (cardData.audio) {
       const audioBtn = document.createElement("a");
       audioBtn.id = "jpdb-media-audio";
@@ -565,15 +566,38 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
   });
 }
 
+function extractVidFromPlainHtml() {
+  // Look for an anchor with the "plain" class that has an href starting with "/vocabulary/"
+  const plainLink = document.querySelector('a.plain[href^="/vocabulary/"]');
+  if (plainLink) {
+    const href = plainLink.getAttribute('href'); // e.g. "/vocabulary/1484150/秘密#a"
+    const match = href.match(/\/vocabulary\/(\d+)\//);
+    if (match) {
+      const vid = match[1];
+      console.log("Extracted vid from plain HTML:", vid);
+      return vid;
+    }
+  }
+  console.warn("Could not extract vid from plain review HTML.");
+  return null;
+}
+
+
 async function insertMediaInReview() {
-  const vid = extractVidFromReviewUrl();
-  if (!vid) return;
+  let vid = extractVidFromReviewUrl();
+  if (!vid) {
+    // Fallback to HTML extraction if URL doesn't include vid
+    vid = extractVidFromPlainHtml();
+  }
+  if (!vid) return; // If still not found, do nothing
+
   const vidRecord = await getVidRecord(vid);
   if (!vidRecord) return;
   const cardIds = vidRecord.cards;
   if (!cardIds || cardIds.length === 0) return;
 
   const elements = createMediaBlock();
+  // Adjust insertion point as needed. Here we try to insert next to the vocabulary section.
   const mainContent = document.querySelector(".result.vocabulary .vbox.gap");
   if (mainContent) {
     const wrapper = document.createElement("div");
@@ -594,6 +618,7 @@ async function insertMediaInReview() {
   const cardsMapping = await getCardsMapping(cardIds);
   setupMediaBlock(vid, { cards: cardsMapping }, cardIds, elements);
 }
+
 
 async function insertMediaInVocabularyPage() {
   const vid = extractVidFromVocabularyUrl();
