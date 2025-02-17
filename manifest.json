@@ -18,7 +18,7 @@
         "default_icon": {
             "32": "icon.png"
         },
-        "default_title": "JPDB Media Importer",
+        "default_title": "JPDB Media Support",
         "default_popup": "popup.html"
     },
     "permissions": [
@@ -31,7 +31,7 @@
       "content_scripts": [
         {
           "matches": ["https://jpdb.io/review*", "https://jpdb.io/vocabulary*"],
-          "js": ["content.js"],
+          "js": ["dexie.js", "content.js"],
           "run_at": "document_end"
           
         }

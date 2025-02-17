@@ -1,74 +1,76 @@
-// Global variable to store all fetched cards from the selected deck
-let fetchedCards = [];
+/* popup.js using Dexie.js for IndexedDB */
 
-// Load the state of the extension enabled switch
+const db = new Dexie("JPDBMediaSupportDB");
+db.version(1).stores({
+  settings: "key",
+  cards: "cardId",
+  vids: "vid"
+});
+
+// --- Helper functions for settings ---
+function getSetting(key, defaultValue) {
+  return db.settings.get(key).then((item) => (item ? item.value : defaultValue));
+}
+
+function saveSetting(key, value) {
+  return db.settings.put({ key, value });
+}
+
 function loadExtensionEnabled() {
-  chrome.storage.local.get("extensionEnabled", (data) => {
-    // Default to enabled if not set
-    document.getElementById("extensionEnabled").checked =
-      data.extensionEnabled === undefined ? true : data.extensionEnabled;
+  getSetting("extensionEnabled", true).then((value) => {
+    document.getElementById("extensionEnabled").checked = value;
   });
 }
 
-// Load the state of the hide native sentence switch
 function loadHideNativeSentence() {
-  chrome.storage.local.get("hideNativeSentence", (data) => {
-    // Default to hiding the native sentence if not set
-    document.getElementById("hideNativeSentence").checked =
-      data.hideNativeSentence === undefined ? true : data.hideNativeSentence;
+  getSetting("hideNativeSentence", true).then((value) => {
+    document.getElementById("hideNativeSentence").checked = value;
   });
 }
 
-/**
- * Load stored settings from chrome.storage and apply them to the UI.
- */
 function loadSettings() {
-  chrome.storage.local.get(
-    [
-      "jpdbApiKey",
-      "selectedDeck",
-      "selectedContextField",
-      "selectedImageField",
-      "selectedAudioField",
-      "autoPlayAudio"
-    ],
-    function (data) {
-      if (data.jpdbApiKey) {
-        document.getElementById("jpdbApiKey").value = data.jpdbApiKey;
+  Promise.all([
+    getSetting("jpdbApiKey", ""),
+    getSetting("selectedDeck", ""),
+    getSetting("selectedContextField", ""),
+    getSetting("selectedImageField", ""),
+    getSetting("selectedAudioField", ""),
+    getSetting("autoPlayAudio", false)
+  ]).then(
+    ([
+      jpdbApiKey,
+      selectedDeck,
+      selectedContextField,
+      selectedImageField,
+      selectedAudioField,
+      autoPlayAudio
+    ]) => {
+      if (jpdbApiKey) {
+        document.getElementById("jpdbApiKey").value = jpdbApiKey;
       }
-      if (data.selectedDeck) {
-        document.getElementById("deckSelect").value = data.selectedDeck;
+      if (selectedDeck) {
+        document.getElementById("deckSelect").value = selectedDeck;
       }
-      if (data.selectedContextField) {
-        document.getElementById("contextFieldSelect").value = data.selectedContextField;
+      if (selectedContextField) {
+        document.getElementById("contextFieldSelect").value = selectedContextField;
       }
-      if (data.selectedImageField) {
-        document.getElementById("imageFieldSelect").value = data.selectedImageField;
+      if (selectedImageField) {
+        document.getElementById("imageFieldSelect").value = selectedImageField;
       }
-      if (data.selectedAudioField) {
-        document.getElementById("audioFieldSelect").value = data.selectedAudioField;
+      if (selectedAudioField) {
+        document.getElementById("audioFieldSelect").value = selectedAudioField;
       }
-      if (typeof data.autoPlayAudio !== "undefined") {
-        document.getElementById("autoPlayAudio").checked = data.autoPlayAudio;
-      }
+      document.getElementById("autoPlayAudio").checked = autoPlayAudio;
       loadExtensionEnabled();
       loadHideNativeSentence();
     }
   );
 }
 
-/**
- * Save a setting to chrome.storage.
- */
-function saveSetting(key, value) {
-  let setting = {};
-  setting[key] = value;
-  chrome.storage.local.set(setting);
-}
+// ------------------------------
+// Deck and Card functions (unchanged API calls)
+// ------------------------------
 
-/**
- * Fetch decks using Anki Connect's deckNames action.
- */
 async function fetchDecks() {
   const ankiUrl = document.getElementById("url").value.trim();
   const deckSelect = document.getElementById("deckSelect");
@@ -97,11 +99,10 @@ async function fetchDecks() {
       if (data.result.length === 0) {
         deckSelect.innerHTML = '<option value="">-- No decks found --</option>';
       }
-
       // Retrieve stored deck value and select it if it exists.
-      chrome.storage.local.get("selectedDeck", (storedData) => {
-        if (storedData.selectedDeck) {
-          deckSelect.value = storedData.selectedDeck;
+      getSetting("selectedDeck", "").then((storedDeck) => {
+        if (storedDeck) {
+          deckSelect.value = storedDeck;
           deckSelect.dispatchEvent(new Event("change"));
         }
       });
@@ -114,10 +115,6 @@ async function fetchDecks() {
   }
 }
 
-/**
- * Load cards for the selected deck using findCards and cardsInfo.
- * Populate field dropdowns using the fields from the first card.
- */
 async function loadCardsAndFields() {
   const ankiUrl = document.getElementById("url").value.trim();
   const deckSelect = document.getElementById("deckSelect");
@@ -127,7 +124,7 @@ async function loadCardsAndFields() {
   saveSetting("selectedDeck", deckName);
 
   resultDiv.innerHTML = "";
-  fetchedCards = [];
+  window.fetchedCards = []; // global variable to store fetched cards
 
   if (!ankiUrl || !deckName) {
     alert("Please provide a valid Anki Connect URL and select a deck.");
@@ -135,7 +132,7 @@ async function loadCardsAndFields() {
   }
 
   try {
-    // Get card IDs from the deck
+    // Get card IDs
     const findCardsResponse = await fetch(ankiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -151,7 +148,7 @@ async function loadCardsAndFields() {
       return;
     }
 
-    // Get detailed info for these cards
+    // Get card details
     const cardIds = findCardsData.result;
     const cardsInfoResponse = await fetch(ankiUrl, {
       method: "POST",
@@ -168,40 +165,31 @@ async function loadCardsAndFields() {
       return;
     }
 
-    fetchedCards = cardsInfoData.result;
+    window.fetchedCards = cardsInfoData.result;
 
-    // Populate the field dropdowns using fields from the first card
-    const firstCard = fetchedCards[0];
+    // Use fields from the first card to populate dropdowns.
+    const firstCard = window.fetchedCards[0];
     const fieldNames = Object.keys(firstCard.fields);
 
     populateFieldDropdown("contextFieldSelect", fieldNames);
-    chrome.storage.local.get("selectedContextField", (data) => {
-      if (data.selectedContextField) {
-        document.getElementById("contextFieldSelect").value = data.selectedContextField;
-      }
+    getSetting("selectedContextField", "").then((val) => {
+      if (val) document.getElementById("contextFieldSelect").value = val;
     });
 
     populateFieldDropdown("imageFieldSelect", fieldNames);
-    chrome.storage.local.get("selectedImageField", (data) => {
-      if (data.selectedImageField) {
-        document.getElementById("imageFieldSelect").value = data.selectedImageField;
-      }
+    getSetting("selectedImageField", "").then((val) => {
+      if (val) document.getElementById("imageFieldSelect").value = val;
     });
 
     populateFieldDropdown("audioFieldSelect", fieldNames);
-    chrome.storage.local.get("selectedAudioField", (data) => {
-      if (data.selectedAudioField) {
-        document.getElementById("audioFieldSelect").value = data.selectedAudioField;
-      }
+    getSetting("selectedAudioField", "").then((val) => {
+      if (val) document.getElementById("audioFieldSelect").value = val;
     });
   } catch (error) {
     console.error("Error loading cards:", error);
   }
 }
 
-/**
- * Utility to populate a select element with a list of field names.
- */
 function populateFieldDropdown(selectId, fieldNames) {
   const selectElem = document.getElementById(selectId);
   selectElem.innerHTML = '<option value="">-- Select a field --</option>';
@@ -213,9 +201,6 @@ function populateFieldDropdown(selectId, fieldNames) {
   });
 }
 
-/**
- * Call the JPDB API for a given context text and return an array of vocabulary IDs.
- */
 async function getVidsFromContext(contextText) {
   const jpdbUrl = "https://jpdb.io/api/v1/parse";
   const token = document.getElementById("jpdbApiKey").value.trim();
@@ -255,9 +240,6 @@ async function getVidsFromContext(contextText) {
   return { vids: [], tokens: [], vocabulary: [] };
 }
 
-/**
- * Utility: Extract the image filename from an HTML string.
- */
 function extractImageFilename(imageHTML) {
   if (!imageHTML) return "";
   const tempDiv = document.createElement("div");
@@ -266,9 +248,6 @@ function extractImageFilename(imageHTML) {
   return img ? img.getAttribute("src") : imageHTML;
 }
 
-/**
- * Utility: Extract the audio filename from text.
- */
 function extractAudioFilename(audioText) {
   if (!audioText) return "";
   if (audioText.startsWith("[sound:") && audioText.endsWith("]")) {
@@ -277,9 +256,6 @@ function extractAudioFilename(audioText) {
   return audioText;
 }
 
-/**
- * Process all cards in the selected deck, build the data JSON, and store it.
- */
 async function fetchAndStoreData() {
   const contextField = document.getElementById("contextFieldSelect").value;
   const imageField = document.getElementById("imageFieldSelect").value;
@@ -287,7 +263,7 @@ async function fetchAndStoreData() {
   const resultDiv = document.getElementById("result");
   const progressBar = document.getElementById("progressBar");
 
-  // Save selected field settings
+  // Save field settings
   saveSetting("selectedContextField", contextField);
   saveSetting("selectedImageField", imageField);
   saveSetting("selectedAudioField", audioField);
@@ -303,69 +279,61 @@ async function fetchAndStoreData() {
     return;
   }
 
-  chrome.storage.local.get("jpdbData", async (storedData) => {
-    let existingData = storedData.jpdbData || { cards: {}, vid: {} };
-    let dataJson = { cards: {}, vid: {} };
+  progressBar.style.display = "block";
+  progressBar.value = 0;
+  const totalCards = window.fetchedCards.length;
 
-    progressBar.style.display = "block";
-    progressBar.value = 0;
+  for (let i = 0; i < totalCards; i++) {
+    const card = window.fetchedCards[i];
+    const cardId = card.cardId;
+    const contextText = card.fields[contextField].value.trim();
+    const rawImageText = card.fields[imageField].value.trim();
+    const rawAudioText = card.fields[audioField].value.trim();
 
-    const totalCards = fetchedCards.length;
+    const imageFilename = extractImageFilename(rawImageText);
+    const audioFilename = extractAudioFilename(rawAudioText);
 
-    for (let i = 0; i < totalCards; i++) {
-      const card = fetchedCards[i];
-      const cardId = card.cardId;
-      const contextText = card.fields[contextField].value.trim();
-      const rawImageText = card.fields[imageField].value.trim();
-      const rawAudioText = card.fields[audioField].value.trim();
-
-      const imageFilename = extractImageFilename(rawImageText);
-      const audioFilename = extractAudioFilename(rawAudioText);
-
-      let newCardData;
-      if (
-        existingData.cards[cardId] &&
-        existingData.cards[cardId].context === contextText &&
-        existingData.cards[cardId].image === imageFilename &&
-        existingData.cards[cardId].audio === audioFilename
-      ) {
-        newCardData = existingData.cards[cardId];
-        console.log(`Card ${cardId} unchanged, skipping JPDB API call.`);
-      } else {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        const jpdbData = contextText ? await getVidsFromContext(contextText) : { vids: [] };
-        newCardData = {
-          context: contextText,
-          image: imageFilename,
-          audio: audioFilename,
-          vids: jpdbData.vids
-        };
-      }
-
-      dataJson.cards[cardId] = newCardData;
-      progressBar.value = Math.round(((i + 1) / totalCards) * 100);
+    // Check for an existing record
+    let newCardData = await db.cards.get(cardId);
+    if (
+      newCardData &&
+      newCardData.context === contextText &&
+      newCardData.image === imageFilename &&
+      newCardData.audio === audioFilename
+    ) {
+      console.log(`Card ${cardId} unchanged, skipping JPDB API call.`);
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const jpdbData = contextText ? await getVidsFromContext(contextText) : { vids: [] };
+      newCardData = {
+        cardId,
+        context: contextText,
+        image: imageFilename,
+        audio: audioFilename,
+        vids: jpdbData.vids
+      };
+      await db.cards.put(newCardData);
     }
 
-    // Rebuild reverse mapping for vocabulary IDs
-    Object.keys(dataJson.cards).forEach((cardId) => {
-      let cardData = dataJson.cards[cardId];
-      cardData.vids.forEach((vid) => {
-        if (!dataJson.vid[vid]) {
-          dataJson.vid[vid] = { cards: [] };
+    // Update reverse mapping for vocabulary IDs
+    for (const vid of newCardData.vids) {
+      let existingVid = await db.vids.get(vid);
+      if (existingVid) {
+        if (!existingVid.cards.includes(cardId)) {
+          existingVid.cards.push(cardId);
+          await db.vids.put(existingVid);
         }
-        if (!dataJson.vid[vid].cards.includes(cardId)) {
-          dataJson.vid[vid].cards.push(cardId);
-        }
-      });
-    });
+      } else {
+        await db.vids.put({ vid: vid, cards: [cardId] });
+      }
+    }
 
-    progressBar.style.display = "none";
+    progressBar.value = Math.round(((i + 1) / totalCards) * 100);
+  }
 
-    chrome.storage.local.set({ jpdbData: dataJson }, () => {
-      resultDiv.innerText = `Data fetched and stored successfully! Total cards: ${totalCards}`;
-      resultDiv.style.display = "block";
-    });
-  });
+  progressBar.style.display = "none";
+  resultDiv.innerText = `Data fetched and stored successfully! Total cards: ${totalCards}`;
+  resultDiv.style.display = "block";
 }
 
 // ------------------------------
@@ -380,33 +348,37 @@ document.getElementById("fetchData").addEventListener("click", fetchAndStoreData
 document.getElementById("jpdbApiKey").addEventListener("change", (e) => {
   saveSetting("jpdbApiKey", e.target.value.trim());
 });
-document.getElementById("saveConfigButton").addEventListener("click", () => {
-  chrome.storage.local.get(null, (data) => {
-    const json = JSON.stringify(data, null, 2);
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "config.json";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  });
+document.getElementById("saveConfigButton").addEventListener("click", async () => {
+  const settings = await db.settings.toArray();
+  const cards = await db.cards.toArray();
+  const vids = await db.vids.toArray();
+  const configData = { settings, cards, vids };
+  const json = JSON.stringify(configData, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "JPDB_Media_Support_Config.json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 });
 document.getElementById("loadConfigButton").addEventListener("click", () => {
   document.getElementById("configFileInput").click();
 });
-document.getElementById("configFileInput").addEventListener("change", (event) => {
+document.getElementById("configFileInput").addEventListener("change", async (event) => {
   const file = event.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = function (e) {
+  reader.onload = async function (e) {
     try {
       const configData = JSON.parse(e.target.result);
-      chrome.storage.local.set(configData, () => {
-        alert("Configuration loaded successfully!");
-      });
+      await Promise.all([db.settings.clear(), db.cards.clear(), db.vids.clear()]);
+      if (configData.settings) await db.settings.bulkPut(configData.settings);
+      if (configData.cards) await db.cards.bulkPut(configData.cards);
+      if (configData.vids) await db.vids.bulkPut(configData.vids);
+      alert("Configuration loaded successfully!");
     } catch (err) {
       alert("Error parsing configuration file: " + err.message);
     }
@@ -423,9 +395,6 @@ document.getElementById("hideNativeSentence").addEventListener("change", (e) => 
   saveSetting("hideNativeSentence", e.target.checked);
 });
 document.addEventListener("DOMContentLoaded", () => {
-  // Other existing event listeners and logic...
-
-  // Add event listener for GitHub button
   const githubButton = document.getElementById("githubButton");
   if (githubButton) {
     githubButton.addEventListener("click", () => {

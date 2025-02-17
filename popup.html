@@ -101,6 +101,9 @@
     progress::-webkit-progress-value {
       background-color: #4b8dff;
     }
+    #progressBar {
+      margin: 20px auto;    /* Center horizontally with auto left/right margins and add vertical spacing */
+    }
     #result {
       padding: 10px;
       border: 0px solid #4b8dff;
@@ -131,7 +134,7 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background-color: #bbbbbb;
+      background-color: #555555;
       transition: 0.4s;
       border-radius: 34px;
     }
@@ -232,10 +235,11 @@
         <option value="">-- Select audio field --</option>
       </select>
     </div>
-    
-    <button id="fetchData">Fetch Data</button>
-    
+
     <progress id="progressBar" value="0" max="100"></progress>
+    
+
+    <button id="fetchData">Sync Data With Anki</button>
     
     <div id="result"></div>
     
@@ -264,9 +268,9 @@
     <input type="file" id="configFileInput" accept="application/json" style="display:none;">
 
     <!-- GitHub Page Button (Button only, no inline JS) -->
-    <button id="githubButton">Visit GitHub Page for More Info !!!</button>
+    <button id="githubButton">Visit GitHub Page for More Info...</button>
   </div>
-  
+  <script src="dexie.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
