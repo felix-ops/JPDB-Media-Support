@@ -1,5 +1,5 @@
 # JPDB Media Importer Chrome Extension
-![image](https://github.com/user-attachments/assets/63b1ec86-2cad-4278-ba2e-1b1ad1bbfa40)
+![image](https://github.com/user-attachments/assets/59a3bb4b-3056-4379-9f46-974e79fefdab)
 ![image](https://github.com/user-attachments/assets/a4a3941d-55f0-4c46-9219-c22ec486c334)
 
 
