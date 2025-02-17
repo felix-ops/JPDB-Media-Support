@@ -10,6 +10,9 @@ JPDB Media Importer is a Chrome extension designed for **JPDB** users who want t
 ## Vocabulary Page
 ![image](https://github.com/user-attachments/assets/a4a3941d-55f0-4c46-9219-c22ec486c334)
 
+## Demo
+https://github.com/user-attachments/assets/015ffdb5-ca37-458b-8345-2e13f8a0863a
+
 
 
 ## Features
