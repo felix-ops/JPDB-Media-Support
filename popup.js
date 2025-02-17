@@ -303,7 +303,7 @@ async function fetchAndStoreData() {
     ) {
       console.log(`Card ${cardId} unchanged, skipping JPDB API call.`);
     } else {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 100));
       const jpdbData = contextText ? await getVidsFromContext(contextText) : { vids: [] };
       newCardData = {
         cardId,
