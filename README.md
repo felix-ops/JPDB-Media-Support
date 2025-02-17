@@ -1,4 +1,7 @@
 # JPDB Media Importer Chrome Extension
+![image](https://github.com/user-attachments/assets/63b1ec86-2cad-4278-ba2e-1b1ad1bbfa40)
+![image](https://github.com/user-attachments/assets/a4a3941d-55f0-4c46-9219-c22ec486c334)
+
 
 ## Overview
 JPDB Media Importer is a Chrome extension designed for **JPDB** users who want to enhance their learning experience by integrating custom media (images, audio, and sentences) into the JPDB site. This extension enables users to pull media from **Anki** using the **Anki Connect API**.  the user can create custom Anki decks using tools like **asbplayer** or **subs2srs**, and use the created deck as a media for JPDB site.
