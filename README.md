@@ -1,9 +1,9 @@
 # JPDB Media Importer Chrome Extension
 
 ## Overview
-JPDB Media Importer is a Chrome extension designed for **JPDB** users who want to enhance their learning experience by integrating custom media (images, audio, and sentences) into the JPDB site. This extension enables users to pull media from **Anki** using the **Anki Connect API**.  the user can create custom Anki decks using tools like **asbplayer** or **subs2srs**, and use the created deck as a media source for JPDB site.
+JPDB Media Support is a Chrome extension designed for **JPDB** users who want to enhance their learning experience by integrating custom media (images, audio, and sentences) into the JPDB platform. This extension enables users to fetch media from existing **Anki** decks.  the user can create custom Anki decks using tools like **asbplayer** or **subs2srs**, and use the created anki deck as a media source for JPDB site.
 
-
+ 
 ## Review Page
 ![image](https://github.com/user-attachments/assets/59a3bb4b-3056-4379-9f46-974e79fefdab)
 
@@ -23,7 +23,7 @@ https://github.com/user-attachments/assets/015ffdb5-ca37-458b-8345-2e13f8a0863a
 ## Requirements
 To start using this extension, make sure you have the following:
 
-1. **JPDB API Key** Required for interacting with JPDB (Don't use the same API key shown in the Video, use the one available in your JPDB settings page !!!)
+1. **JPDB API Key** Required for interacting with JPDB (Don't use the same API key shown in the Video, use the one available at the bottom of the JPDB settings page !!!)
 2. **Anki** (Installed on your computer)
 3. **Anki Connect Addon** (Installed in Anki)
 4. **Anki Deck** (Containing the media files you want to integrate with JPDB)
@@ -54,7 +54,7 @@ To start using this extension, make sure you have the following:
 - Ensure that **Anki is running** in the background.
 - Check if **Anki Connect is installed** and responding at `http://localhost:8765`.
 - Verify that the **deck and field names** in the extension match those in Anki.
-- Make sure that the **each card's context field has some valid vocabulary text**.
+- Make sure that the **each card's context field has some valid vocabulary**.
 
 
 ## Contribution
