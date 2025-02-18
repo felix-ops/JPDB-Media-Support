@@ -109,7 +109,7 @@ async function fetchMediaFile(filename) {
         if (response && response.success) {
           resolve(response.result);
         } else {
-          console.error("Error fetching media file for", filename, response ? response.error : "No response");
+          console.error("Error fetching media file for", filename, response ? response.error : "No response", "(Make sure Anki is running)");
           resolve(null);
         }
       }
@@ -563,7 +563,6 @@ function extractVidFromPlainHtml() {
       return vid;
     }
   }
-  console.warn("Could not extract vid from plain review HTML.");
   return null;
 }
 
