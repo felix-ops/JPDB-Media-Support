@@ -1,7 +1,3 @@
-/* Modified content.js that accesses IndexedDB via background messaging */
-
-console.log("JPDB Content Script Loaded");
-
 // --- Utility Functions for Database Access via Messaging ---
 function getSetting(key, defaultValue) {
   return new Promise((resolve) => {
@@ -33,7 +29,6 @@ function getCardsMapping(cardIds) {
 let lastUrl = location.href;
 setInterval(() => {
   if (location.href !== lastUrl) {
-    console.log("URL changed from", lastUrl, "to", location.href);
     lastUrl = location.href;
     initIfEnabled(); // re-run if enabled when URL changes
   }
@@ -53,27 +48,22 @@ function pauseOtherAudios(currentAudio) {
 
 function extractVidFromReviewUrl() {
   const params = new URLSearchParams(window.location.search);
-  const cParam = params.get("c"); // e.g. "vf,1550190,2786244425"
-  console.log("Parameter c:", cParam);
+  const cParam = params.get("c");
   if (cParam) {
     const parts = cParam.split(",");
     if (parts.length >= 2) {
       const vid = parts[1];
-      console.log("Extracted vid from review URL:", vid);
       return vid;
     }
   }
-  console.warn("Could not extract vid from URL.");
   return null;
 }
 
 function extractVidFromVocabularyUrl() {
   const parts = location.pathname.split("/");
   if (parts[1] === "vocabulary" && parts[2]) {
-    console.log("Extracted vid from vocabulary URL:", parts[2]);
     return parts[2];
   }
-  console.warn("Could not extract vid from vocabulary URL.");
   return null;
 }
 
@@ -117,7 +107,6 @@ async function fetchMediaFile(filename) {
       { action: "fetchMediaFile", filename: filename, ankiUrl: ankiUrl },
       (response) => {
         if (response && response.success) {
-          console.log(`Fetched media file for "${filename}"`);
           resolve(response.result);
         } else {
           console.error("Error fetching media file for", filename, response ? response.error : "No response");
@@ -362,11 +351,9 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
 
     const cardId = cardIds[index];
     if (!jpdbData.cards || !jpdbData.cards[cardId]) {
-      console.warn("No card data for card", cardId);
       return;
     }
     const cardData = jpdbData.cards[cardId];
-    console.log("Loading card data for vid", vid, "card", cardId, "at index", index);
 
     const contextText = cardData.context;
     let filteredText = "";
@@ -436,7 +423,6 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
                       document.removeEventListener("click", playAfterInteraction);
                     };
                     document.addEventListener("click", playAfterInteraction);
-                    console.warn("Auto-play prevented; waiting for user interaction.");
                   } else {
                     console.error("Audio play error:", error);
                   }
@@ -574,7 +560,6 @@ function extractVidFromPlainHtml() {
     const match = href.match(/\/vocabulary\/(\d+)\//);
     if (match) {
       const vid = match[1];
-      console.log("Extracted vid from plain HTML:", vid);
       return vid;
     }
   }
@@ -640,7 +625,6 @@ async function insertMediaInVocabularyPage() {
 }
 
 function init() {
-  console.log("Running init() for JPDB content script.");
   if (location.pathname.includes("/vocabulary/") && !location.search.includes("c=")) {
     insertMediaInVocabularyPage();
   } else {
@@ -651,7 +635,6 @@ function init() {
 function initIfEnabled() {
   getSetting("extensionEnabled", true).then((enabled) => {
     if (enabled === false) {
-      console.log("Extension disabled; skipping modifications.");
       return;
     }
     init();

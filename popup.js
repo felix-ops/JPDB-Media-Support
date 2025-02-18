@@ -75,7 +75,6 @@ async function fetchDecks() {
   const ankiUrl = document.getElementById("url").value.trim();
   const deckSelect = document.getElementById("deckSelect");
   deckSelect.innerHTML = '<option value="">-- Loading decks --</option>';
-  console.log("Fetching decks from:", ankiUrl);
 
   try {
     const response = await fetch(ankiUrl, {
@@ -87,7 +86,6 @@ async function fetchDecks() {
       })
     });
     const data = await response.json();
-    console.log("Decks response:", data);
     deckSelect.innerHTML = "";
     if (data.result && Array.isArray(data.result)) {
       data.result.forEach((deckName) => {
@@ -229,7 +227,6 @@ async function getVidsFromContext(contextText) {
       })
     });
     const data = await response.json();
-    console.log("JPDB API response:", data);
     if (data.vocabulary && Array.isArray(data.vocabulary)) {
       const vids = data.vocabulary.map((vocab) => String(vocab[0]));
       return { vids, tokens: data.tokens, vocabulary: data.vocabulary };
@@ -301,7 +298,6 @@ async function fetchAndStoreData() {
       newCardData.image === imageFilename &&
       newCardData.audio === audioFilename
     ) {
-      console.log(`Card ${cardId} unchanged, skipping JPDB API call.`);
     } else {
       await new Promise((resolve) => setTimeout(resolve, 100));
       const jpdbData = contextText ? await getVidsFromContext(contextText) : { vids: [] };
