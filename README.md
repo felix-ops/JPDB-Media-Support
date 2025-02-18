@@ -1,7 +1,8 @@
 # JPDB Media Importer Chrome Extension
 
 ## Overview
-JPDB Media Support is a Chrome extension designed for **JPDB** users who want to enhance their learning experience by integrating custom media (images, audio, and sentences) into the JPDB platform. This extension enables users to fetch media from existing **Anki** decks.  the user can create custom Anki decks using tools like **asbplayer** or **subs2srs**, and use the created anki deck as a media source for JPDB site.
+This extension designed for **JPDB** users who want to enhance their learning experience by integrating custom images, audio, and sentences into the JPDB platform.
+This extension enables users to fetch media from existing **Anki** decks and displays them during reviews.  You can create custom Anki decks using tools like **asbplayer** or **subs2srs**, and sync created anki deck as a media source for JPDB site using this extension.
 
  
 ## Review Page
@@ -23,10 +24,10 @@ https://github.com/user-attachments/assets/015ffdb5-ca37-458b-8345-2e13f8a0863a
 ## Requirements
 To start using this extension, make sure you have the following:
 
-1. **JPDB API Key** Required for interacting with JPDB (Don't use the same API key shown in the Video, use the one available at the bottom of the JPDB settings page !!!)
+1. **JPDB API Key** Required for interacting with JPDB (Don't use the same API key shown in the Video, use the one available at the bottom of the JPDB settings page!)
 2. **Anki** (Installed on your computer)
 3. **Anki Connect Addon** (Installed in Anki)
-4. **Anki Deck** (Containing the media files you want to integrate with JPDB)
+4. **Anki Deck** (Containing the media files you want to sync with JPDB)
 5. **Chrome Browser** (any browser which supports Chrome extensions)
 
 ## Installation & Setup
