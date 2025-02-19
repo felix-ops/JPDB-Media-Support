@@ -31,11 +31,11 @@ To start using this extension, make sure you have the following:
 - **Chrome Browser** (any browser which supports Chrome extensions)
 
 ## Manual Installation
-- Download the code as a .zip file.
+- Download the code as a `.zip` file.
 - Extract the zip file in a location of your choosing
-- Open up your browser and navigate to chrome://extensions/
-- Check the Developer mode switch at the top right of your window
-- Click the Load unpacked button at the top left
+- Open up your browser and navigate to `chrome://extensions/`
+- Check the `Developer mode` switch at the top right of your window
+- Click the `Load unpacked` button at the top left
 - In the file picker dialog, navigate to the folder where you extracted earlier. You should see a file called manifest.json inside the folder
 - Click select/open/choose to exit the dialog and load the extension.
 
