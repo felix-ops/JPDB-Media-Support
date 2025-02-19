@@ -30,14 +30,23 @@ To start using this extension, make sure you have the following:
 4. **Anki Deck** (Containing the media files you want to sync with JPDB)
 5. **Chrome Browser** (any browser which supports Chrome extensions)
 
-## Installation & Setup
+## Manual Installation
+1. Download the code as a .zip file.
+- Extract the zip file in a location of your choosing
+2. Open up your browser and navigate to chrome://extensions/
+3. Check the Developer mode switch at the top right of your window
+4. Click the Load unpacked button at the top left
+5. In the file picker dialog, navigate to the folder where you extracted earlier. You should see a file called manifest.json inside the folder
+6. Click select/open/choose to exit the dialog and load the extension.
+
+## Setup
 ### 1. Install Anki & Anki Connect
 - Download and install **[Anki](https://apps.ankiweb.net/)**.
 - Install the **[Anki Connect Addon](https://ankiweb.net/shared/info/2055492159)** from AnkiWeb.
 - create the deck 
 
 ### 2. Configure the Extension
-- Enter your **JPDB API Key** (which is crucial for categorizing media base on VID).
+- Enter your **JPDB API Key** (which is crucial for categorizing media base on JPDB's VID).
 - Set the **Anki Connect URL** (default: `http://localhost:8765`).
 - Choose the **Anki Deck** which contains the cards to fetch media from.
 - In the **Context Field** choose the field that contains the sentences. (It can contain both the Japanese and Translated sentences together, the extension will handle the separation) 
