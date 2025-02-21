@@ -169,9 +169,14 @@ async function loadCardsAndFields() {
     const firstCard = window.fetchedCards[0];
     const fieldNames = Object.keys(firstCard.fields);
 
-    populateFieldDropdown("contextFieldSelect", fieldNames);
-    getSetting("selectedContextField", "").then((val) => {
-      if (val) document.getElementById("contextFieldSelect").value = val;
+    populateFieldDropdown("japaneseFieldSelect", fieldNames);
+    getSetting("selectedJapaneseField", "").then(val => {
+      if (val) document.getElementById("japaneseFieldSelect").value = val;
+    });
+
+    populateFieldDropdown("englishFieldSelect", fieldNames);
+    getSetting("selectedEnglishField", "").then(val => {
+      if (val) document.getElementById("englishFieldSelect").value = val;
     });
 
     populateFieldDropdown("imageFieldSelect", fieldNames);
@@ -242,7 +247,29 @@ function extractImageFilename(imageHTML) {
   const tempDiv = document.createElement("div");
   tempDiv.innerHTML = imageHTML;
   const img = tempDiv.querySelector("img");
-  return img ? img.getAttribute("src") : imageHTML;
+  let filename = img ? img.getAttribute("src") : imageHTML;
+  try {
+    // Decode any existing percent encoding and then re-encode properly.
+    filename = encodeURI(decodeURIComponent(filename));
+  } catch (e) {
+    // Fallback in case the filename isn't properly percent encoded.
+    filename = encodeURI(filename);
+  }
+  return filename;
+}
+
+function extractImageFilenameUsingDOMParser(imageHTML) {
+  if (!imageHTML) return "";
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(imageHTML, "text/html");
+  const img = doc.querySelector("img");
+  let filename = img ? img.getAttribute("src") : imageHTML;
+  // Split on "/" to handle paths correctly and encode each segment
+  filename = filename
+    .split("/")
+    .map(segment => encodeURIComponent(decodeURIComponent(segment)))
+    .join("/");
+  return filename;
 }
 
 function extractAudioFilename(audioText) {
@@ -253,20 +280,35 @@ function extractAudioFilename(audioText) {
   return audioText;
 }
 
+function stripJapaneseHtml(html) {
+  let tempDiv = document.createElement("div");
+  tempDiv.innerHTML = html;
+  return tempDiv.innerText;
+}
+
+function stripEnglishHtml(html) {
+  let tempDiv = document.createElement("div");
+  tempDiv.innerHTML = html.replace(/<br\s*\/?>/g, " ");
+  return tempDiv.innerText;
+}
+
 async function fetchAndStoreData() {
-  const contextField = document.getElementById("contextFieldSelect").value;
+  // Retrieve field selections for Japanese, English, image, and audio.
+  const japaneseField = document.getElementById("japaneseFieldSelect").value;
+  const englishField = document.getElementById("englishFieldSelect").value;
   const imageField = document.getElementById("imageFieldSelect").value;
   const audioField = document.getElementById("audioFieldSelect").value;
   const resultDiv = document.getElementById("result");
   const progressBar = document.getElementById("progressBar");
 
   // Save field settings
-  saveSetting("selectedContextField", contextField);
+  saveSetting("selectedJapaneseField", japaneseField);
+  saveSetting("selectedEnglishField", englishField);
   saveSetting("selectedImageField", imageField);
   saveSetting("selectedAudioField", audioField);
 
-  if (!contextField || !imageField || !audioField) {
-    alert("Please select fields for context, image, and audio.");
+  if (!japaneseField || !englishField || !imageField || !audioField) {
+    alert("Please select fields for Japanese, English, image, and audio.");
     return;
   }
 
@@ -283,27 +325,38 @@ async function fetchAndStoreData() {
   for (let i = 0; i < totalCards; i++) {
     const card = window.fetchedCards[i];
     const cardId = card.cardId;
-    const contextText = card.fields[contextField].value.trim();
+    
+    // Retrieve raw HTML from the selected fields.
+    const rawJapaneseText = card.fields[japaneseField].value.trim();
+    const rawEnglishText = card.fields[englishField].value.trim();
     const rawImageText = card.fields[imageField].value.trim();
     const rawAudioText = card.fields[audioField].value.trim();
 
-    const imageFilename = extractImageFilename(rawImageText);
+    // Process texts using the provided functions.
+    const japaneseText = stripJapaneseHtml(rawJapaneseText);
+    const englishText = stripEnglishHtml(rawEnglishText);
+
+    const imageFilename = extractImageFilenameUsingDOMParser(rawImageText);
     const audioFilename = extractAudioFilename(rawAudioText);
 
-    // Check for an existing record
+    // Check for an existing record; compare using the new field names.
     let newCardData = await db.cards.get(cardId);
     if (
       newCardData &&
-      newCardData.context === contextText &&
+      newCardData.japaneseContext === japaneseText &&
+      newCardData.englishContext === englishText &&
       newCardData.image === imageFilename &&
       newCardData.audio === audioFilename
     ) {
+      // Existing record is up-to-date; no need to update.
     } else {
       await new Promise((resolve) => setTimeout(resolve, 100));
-      const jpdbData = contextText ? await getVidsFromContext(contextText) : { vids: [] };
+      // Use the processed Japanese text for JPDB token extraction.
+      const jpdbData = japaneseText ? await getVidsFromContext(japaneseText) : { vids: [] };
       newCardData = {
         cardId,
-        context: contextText,
+        japaneseContext: japaneseText,
+        englishContext: englishText,
         image: imageFilename,
         audio: audioFilename,
         vids: jpdbData.vids
@@ -311,7 +364,7 @@ async function fetchAndStoreData() {
       await db.cards.put(newCardData);
     }
 
-    // Update reverse mapping for vocabulary IDs
+    // Update reverse mapping for vocabulary IDs.
     for (const vid of newCardData.vids) {
       let existingVid = await db.vids.get(vid);
       if (existingVid) {
@@ -331,6 +384,7 @@ async function fetchAndStoreData() {
   resultDiv.innerText = `Data fetched and stored successfully! Total cards: ${totalCards}`;
   resultDiv.style.display = "block";
 }
+
 
 // ------------------------------
 // Event Listeners

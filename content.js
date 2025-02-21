@@ -340,41 +340,40 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
   }
 
   async function loadCard(index) {
+    // Update card counter display
     elements.cardCountElem.innerText = `${index + 1}/${cardIds.length}`;
     elements.cardCountElem.style.display = "block";
-
+  
+    // Pause any existing audio
     let existingAudio = document.getElementById("jpdb-audio");
     if (existingAudio) {
       existingAudio.pause();
       existingAudio.currentTime = 0;
     }
-
+  
     const cardId = cardIds[index];
     if (!jpdbData.cards || !jpdbData.cards[cardId]) {
       return;
     }
     const cardData = jpdbData.cards[cardId];
-
-    const contextText = cardData.context;
-    let filteredText = "";
-    if (contextText) {
-      try {
-        const matches = contextText.match(/[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\uFF00-\uFFEF\u4E00-\u9FAF]+/g);
-        filteredText = matches ? matches.join(" ") : "";
-      } catch (error) {
-        console.error("Error filtering context text:", error);
-        filteredText = contextText;
-      }
-    }
-
+  
+    // Retrieve the raw HTML content from the two separate fields
+    const rawJapaneseHtml = cardData.japaneseContext || "";
+    const rawEnglishHtml = cardData.englishContext || "";
+  
+    // Process the HTML to get plain text using your custom functions
+    const japaneseText = stripJapaneseHtml(rawJapaneseHtml);
+    const englishText = stripEnglishHtml(rawEnglishHtml);
+  
+    // Create container for Japanese sentence (and audio button if applicable)
     const jpContainer = document.createElement("div");
     jpContainer.style.display = "flex";
     jpContainer.style.alignItems = "center";
     jpContainer.style.columnGap = "0.25rem";
     jpContainer.classList.add("card-sentence", "jpdb-inserted");
     jpContainer.style.justifyContent = "center";
-
-    
+  
+    // Handle audio if available
     if (cardData.audio) {
       const audioBtn = document.createElement("a");
       audioBtn.id = "jpdb-media-audio";
@@ -395,7 +394,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
       spacer.style.display = "inline-block";
       jpContainer.appendChild(audioBtn);
       jpContainer.appendChild(spacer);
-
+  
       let audioElem = document.getElementById("jpdb-audio");
       if (!audioElem) {
         audioElem = document.createElement("audio");
@@ -405,7 +404,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
       } else {
         jpContainer.appendChild(audioElem);
       }
-
+  
       fetchMediaFile(cardData.audio)
         .then((audioData) => {
           if (audioData) {
@@ -435,36 +434,37 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
           console.error("Error fetching audio:", error);
         });
     }
-
+  
+    // Create element for the Japanese sentence
     const jpSentence = document.createElement("div");
     jpSentence.className = "sentence";
     jpSentence.style.marginLeft = "0.3rem";
     jpSentence.style.fontSize = "22px";
     jpSentence.style.textAlign = "center";
-    jpSentence.innerText = filteredText;
+    jpSentence.innerText = japaneseText; // Initially plain text
     jpContainer.appendChild(jpSentence);
     elements.contextElem.innerHTML = "";
     elements.contextElem.appendChild(jpContainer);
-
-    if (filteredText) {
-      getTokensForContext(filteredText)
+  
+    // Use JPDB tokenization on the processed Japanese text for highlighting
+    if (japaneseText) {
+      getTokensForContext(japaneseText)
         .then((tokenData) => {
           const tokens = tokenData.tokens;
           const vocabulary = tokenData.vocabulary;
           let newContextHtml = "";
           let lastIndex = 0;
-          
+  
           tokens.sort((a, b) => a[1] - b[1]);
-    
+  
           tokens.forEach((token) => {
             const tokenStart = token[1];
             const tokenLength = token[2];
             const tokenEnd = tokenStart + tokenLength;
-    
-            newContextHtml += filteredText.substring(lastIndex, tokenStart);
-    
-            const tokenText = filteredText.substring(tokenStart, tokenEnd);
-    
+  
+            newContextHtml += japaneseText.substring(lastIndex, tokenStart);
+            const tokenText = japaneseText.substring(tokenStart, tokenEnd);
+  
             if (token[3] !== null) {
               const vocabEntry = vocabulary[token[0]];
               if (vocabEntry && String(vocabEntry[0]) === String(vid)) {
@@ -477,21 +477,16 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
             }
             lastIndex = tokenEnd;
           });
-          
-          newContextHtml += filteredText.substring(lastIndex);
+  
+          newContextHtml += japaneseText.substring(lastIndex);
           jpSentence.innerHTML = newContextHtml;
         })
         .catch((error) => {
           console.error("Error during tokenization:", error);
         });
     }
-    
-    let englishText = "";
-    if (contextText) {
-      const englishMatches = contextText.match(/[^\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\uFF00-\uFFEF\u4E00-\u9FAF]+/g);
-      englishText = englishMatches ? englishMatches.join(" ") : "";
-      englishText = englishText.replace(/<br>/g, " ").trim();
-    }
+  
+    // Create and append English translation container below the Japanese sentence
     if (englishText) {
       const translationContainer = document.createElement("div");
       translationContainer.style.display = "flex";
@@ -504,6 +499,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
       elements.contextElem.appendChild(translationContainer);
     }
   
+    // Handle image display
     if (cardData.image) {
       if (preloadedImages[cardId]) {
         elements.imgElem.src = preloadedImages[cardId];
@@ -540,6 +536,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     }
   }
   
+  
   loadCard(currentCardIndex);
 
   elements.leftButton.addEventListener("click", () => {
@@ -564,6 +561,18 @@ function extractVidFromPlainHtml() {
     }
   }
   return null;
+}
+
+function stripJapaneseHtml(html) {
+  let tempDiv = document.createElement("div");
+  tempDiv.innerHTML = html;
+  return tempDiv.innerText;
+}
+
+function stripEnglishHtml(html) {
+  let tempDiv = document.createElement("div");
+  tempDiv.innerHTML = html.replace(/<br\s*\/?>/g, " ");
+  return tempDiv.innerText;
 }
 
 
