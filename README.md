@@ -2,7 +2,7 @@
 
 ## Overview
 This extension designed for **JPDB** users who want to enhance their learning experience by integrating custom images, audio, and sentences into the JPDB platform.
-This extension enables users to fetch media from existing **Anki** decks and displays them during reviews.  You can create custom Anki cards with Images and audio using tools like **asbplayer** or **subs2srs**, then sync the media from those decks to use within JPDB using this extension.
+This extension enables users to fetch media from existing **Anki** decks and displays them during reviews.  You can create custom Anki cards with Images and audio using tools like **[asbplayer](https://github.com/killergerbah/asbplayer)** or **[subs2srs](https://subs2srs.sourceforge.net/)**, then sync the media from those decks to use within JPDB using this extension.
 
  
 ## Review Page
@@ -31,7 +31,7 @@ To start using this extension, make sure you have the following:
 - **Chrome Browser** (any browser which supports Chrome extensions).
 
 ## Manual Installation
-- Download the code as a `.zip` file.
+- Download the code as a `.zip` file Directly or from Releases Page.
 - Extract the zip file in a location of your choosing.
 - Open up your browser and navigate to `chrome://extensions/`.
 - Check the `Developer mode` switch at the top right of your window.
@@ -48,7 +48,7 @@ To start using this extension, make sure you have the following:
 - Enter your **JPDB API Key** (which is crucial for categorizing media base on JPDB's VID).
 - Set the **Anki Connect URL** (default: `http://localhost:8765`).
 - Choose the **Anki Deck** which contains the cards to fetch media from.
-- In the **Context Field** choose the field that contains the sentences. (It can contain both the Japanese and Translated sentences together, the extension will handle the separation) 
+- In the **Japanese Sentence Field** choose the field which contains the japanese sentence and in the **Translated Sentence Field** choose the field which contains English / any other explanation sentence. 
 - Enable/disable **Auto Play Audio** and **Hide Native Sentence** as needed.
 - Hit **Sync Data with Anki** to fetch all the data from the anki cards.
 - Click **Save Config** to store your settings.
