@@ -30,6 +30,8 @@ To start using this extension, make sure you have the following:
 - **Anki Deck** (Containing the media files you want to sync with JPDB).
 - **Chrome Browser** (any browser which supports Chrome extensions).
 
+## Webstore Installation
+- visit the following link and add to the browser https://chromewebstore.google.com/detail/jpdb-media-support/pdhlakhlcgpogjkfaaidlnpogenbekif
 ## Manual Installation
 - Download the code as a `.zip` file Directly or from Releases Page.
 - Extract the zip file in a location of your choosing.
