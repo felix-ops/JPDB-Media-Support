@@ -48,7 +48,7 @@ To start using this extension, make sure you have the following:
 - Enter your **JPDB API Key** (which is crucial for categorizing media base on JPDB's VID).
 - Set the **Anki Connect URL** (default: `http://localhost:8765`).
 - Choose the **Anki Deck** which contains the cards to fetch media from.
-- In the **Context Field** choose the field that contains the sentences. (It can contain both the Japanese and Translated sentences together, the extension will handle the separation) 
+- In the **Japanese Sentence Field** choose the field which contains the japanese sentence and in the **Translated Sentence Field** choose the field which contains English / any other explanation sentence. 
 - Enable/disable **Auto Play Audio** and **Hide Native Sentence** as needed.
 - Hit **Sync Data with Anki** to fetch all the data from the anki cards.
 - Click **Save Config** to store your settings.
