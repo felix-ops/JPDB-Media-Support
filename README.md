@@ -31,7 +31,7 @@ To start using this extension, make sure you have the following:
 - **Chrome Browser** (any browser which supports Chrome extensions).
 
 ## Webstore Installation
-- visit the following link and add to the browser **[JPDB Media Support](https://chromewebstore.google.com/detail/jpdb-media-support/pdhlakhlcgpogjkfaaidlnpogenbekif)**
+- Visit the following link and add to the browser **[JPDB Media Support](https://chromewebstore.google.com/detail/jpdb-media-support/pdhlakhlcgpogjkfaaidlnpogenbekif)**
 
 ## Manual Installation
 - Download the code as a `.zip` file Directly or from Releases Page.
