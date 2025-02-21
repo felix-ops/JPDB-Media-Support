@@ -31,7 +31,7 @@ To start using this extension, make sure you have the following:
 - **Chrome Browser** (any browser which supports Chrome extensions).
 
 ## Manual Installation
-- Download the code as a `.zip` file.
+- Download the code as a `.zip` file Directly or from Releases Page.
 - Extract the zip file in a location of your choosing.
 - Open up your browser and navigate to `chrome://extensions/`.
 - Check the `Developer mode` switch at the top right of your window.
