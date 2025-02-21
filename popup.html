@@ -103,7 +103,7 @@
       margin: 20px auto;    /* Center horizontally with auto left/right margins and add vertical spacing */
     }
     #result {
-      padding: 10px;
+      margin-bottom: 10px;
       border: 0px solid #4b8dff;
       color: #888888;
       border-radius: 4px;
@@ -155,7 +155,7 @@
     }
     /* Updated switch label styling */
     .switch-label {
-      font-size: 16px; /* Larger text */
+      font-size: 14px; /* Larger text */
       color: #bbbbbb;
       margin: 0;
     }
@@ -168,7 +168,7 @@
     .button-group {
       display: flex;
       gap: 10px;
-      margin-bottom: 15px;
+      margin-bottom: 0px;
     }
     .button-group button {
       flex: 1;
@@ -240,12 +240,26 @@
       </select>
     </div>
 
-    <progress id="progressBar" value="0" max="100"></progress>
-    
+
+
+    <!-- Auto Sync with Anki Switch -->
+<!-- <div class="form-group switch-container">
+  <span class="switch-label">Auto Sync with Anki</span>
+  <label class="switch">
+    <input type="checkbox" id="autoSync">
+    <span class="slider"></span>
+  </label>
+</div> -->
+
+<div id="totalCardCount" style="margin-bottom: 10px; display: flex; align-items: center; justify-content: center; height: 100%; font-size: 13px; color: #888888;"></div>
+
+
+
+<progress id="progressBar" value="0" max="100"></progress>
 
     <button id="fetchData">Sync Data With Anki</button>
-    
     <div id="result"></div>
+
     
     <!-- Auto Play Audio Switch -->
     <div class="form-group switch-container">
@@ -255,15 +269,33 @@
         <span class="slider"></span>
       </label>
     </div>
+
+    <!-- Show English Sentence Switch -->
+<div class="form-group switch-container">
+  <span class="switch-label">Hide Media Translation</span>
+  <label class="switch">
+    <input type="checkbox" id="showEnglishSentence" checked>
+    <span class="slider"></span>
+  </label>
+</div>
     
     <!-- Hide Native Sentence Switch -->
     <div class="form-group switch-container">
-      <span class="switch-label">Hide JPDB's Sentence</span>
+      <span class="switch-label">Hide JPDB's Sentence Block</span>
       <label class="switch">
         <input type="checkbox" id="hideNativeSentence" checked>
         <span class="slider"></span>
       </label>
     </div>
+
+    <div class="form-group" style="display: flex; flex-direction: column; margin-bottom: 15px;">
+      <label for="mediaBlockSize" style="font-size: 14px; color: #cccccc; margin-bottom: 5px;">Media Section Size</label>
+      <div style="display: flex; align-items: center;">
+        <input type="range" id="mediaBlockSize" min="450" max="650" value="650" style="flex-grow: 1; margin-right: 10px;">
+        <span id="mediaBlockSizeValue" style="width: 50px; text-align: right; color: #bbbbbb;">100%</span>
+      </div>
+    </div>
+    
     
     <div class="button-group">
       <button id="saveConfigButton">Save Config</button>

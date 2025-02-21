@@ -31,28 +31,32 @@ function loadHideNativeSentence() {
 function loadSettings() {
   Promise.all([
     getSetting("jpdbApiKey", ""),
-    getSetting("selectedDeck", ""),
-    getSetting("selectedContextField", ""),
+    getSetting("selectedJapaneseField", ""),
+    getSetting("selectedEnglishField", ""),
     getSetting("selectedImageField", ""),
     getSetting("selectedAudioField", ""),
-    getSetting("autoPlayAudio", false)
+    getSetting("autoPlayAudio", false),
+    getSetting("mediaBlockSize", "650"),
+    // getSetting("autoSync", false) // Load autoSync setting
   ]).then(
     ([
       jpdbApiKey,
-      selectedDeck,
-      selectedContextField,
+      selectedJapaneseField,
+      selectedEnglishField,
       selectedImageField,
       selectedAudioField,
-      autoPlayAudio
+      autoPlayAudio,
+      mediaBlockSize,
+      // autoSync
     ]) => {
       if (jpdbApiKey) {
         document.getElementById("jpdbApiKey").value = jpdbApiKey;
       }
-      if (selectedDeck) {
-        document.getElementById("deckSelect").value = selectedDeck;
+      if (selectedJapaneseField) {
+        document.getElementById("japaneseFieldSelect").value = selectedJapaneseField;
       }
-      if (selectedContextField) {
-        document.getElementById("contextFieldSelect").value = selectedContextField;
+      if (selectedEnglishField) {
+        document.getElementById("englishFieldSelect").value = selectedEnglishField;
       }
       if (selectedImageField) {
         document.getElementById("imageFieldSelect").value = selectedImageField;
@@ -61,11 +65,22 @@ function loadSettings() {
         document.getElementById("audioFieldSelect").value = selectedAudioField;
       }
       document.getElementById("autoPlayAudio").checked = autoPlayAudio;
+      
+      // Load slider value for media block size.
+      document.getElementById("mediaBlockSize").value = mediaBlockSize;
+      document.getElementById("mediaBlockSizeValue").innerText = mediaBlockSize + "px";
+      
+      // Load autoSync setting and update the switch.
+      // document.getElementById("autoSync").checked = autoSync;
+      getSetting("showEnglishSentence", true).then((value) => {
+        document.getElementById("showEnglishSentence").checked = !value;
+      });
       loadExtensionEnabled();
       loadHideNativeSentence();
     }
   );
 }
+
 
 // ------------------------------
 // Deck and Card functions (unchanged API calls)
@@ -109,7 +124,7 @@ async function fetchDecks() {
     }
   } catch (error) {
     deckSelect.innerHTML = '<option value="">-- Error loading decks --</option>';
-    console.error("Error fetching decks:", error);
+    console.warn("Error fetching decks:", error);
   }
 }
 
@@ -118,6 +133,7 @@ async function loadCardsAndFields() {
   const deckSelect = document.getElementById("deckSelect");
   const deckName = deckSelect.value;
   const resultDiv = document.getElementById("result");
+  const totalCardCountElem = document.getElementById("totalCardCount");
 
   saveSetting("selectedDeck", deckName);
 
@@ -130,7 +146,7 @@ async function loadCardsAndFields() {
   }
 
   try {
-    // Get card IDs
+    // Get card IDs from Anki Connect
     const findCardsResponse = await fetch(ankiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -146,7 +162,7 @@ async function loadCardsAndFields() {
       return;
     }
 
-    // Get card details
+    // Get card details for the retrieved card IDs
     const cardIds = findCardsData.result;
     const cardsInfoResponse = await fetch(ankiUrl, {
       method: "POST",
@@ -165,33 +181,39 @@ async function loadCardsAndFields() {
 
     window.fetchedCards = cardsInfoData.result;
 
+    // Always show the total cards count below the sync button
+    updateCardCount();
+
     // Use fields from the first card to populate dropdowns.
     const firstCard = window.fetchedCards[0];
     const fieldNames = Object.keys(firstCard.fields);
 
+    // Populate dropdowns for Japanese and English fields.
     populateFieldDropdown("japaneseFieldSelect", fieldNames);
-    getSetting("selectedJapaneseField", "").then(val => {
+    getSetting("selectedJapaneseField", "").then((val) => {
       if (val) document.getElementById("japaneseFieldSelect").value = val;
     });
-
     populateFieldDropdown("englishFieldSelect", fieldNames);
-    getSetting("selectedEnglishField", "").then(val => {
+    getSetting("selectedEnglishField", "").then((val) => {
       if (val) document.getElementById("englishFieldSelect").value = val;
     });
 
+    // Populate dropdowns for image and audio fields.
     populateFieldDropdown("imageFieldSelect", fieldNames);
     getSetting("selectedImageField", "").then((val) => {
       if (val) document.getElementById("imageFieldSelect").value = val;
     });
-
     populateFieldDropdown("audioFieldSelect", fieldNames);
     getSetting("selectedAudioField", "").then((val) => {
       if (val) document.getElementById("audioFieldSelect").value = val;
     });
+
+    
   } catch (error) {
-    console.error("Error loading cards:", error);
+    console.warn("Error loading cards:", error);
   }
 }
+
 
 function populateFieldDropdown(selectId, fieldNames) {
   const selectElem = document.getElementById(selectId);
@@ -237,7 +259,7 @@ async function getVidsFromContext(contextText) {
       return { vids, tokens: data.tokens, vocabulary: data.vocabulary };
     }
   } catch (error) {
-    console.error("Error fetching JPDB data:", error);
+    console.warn("Error fetching JPDB data:", error);
   }
   return { vids: [], tokens: [], vocabulary: [] };
 }
@@ -291,6 +313,15 @@ function stripEnglishHtml(html) {
   tempDiv.innerHTML = html.replace(/<br\s*\/?>/g, " ");
   return tempDiv.innerText;
 }
+
+function updateCardCount() {
+  const totalCardCountElem = document.getElementById("totalCardCount");
+  db.cards.count().then(count => {
+    totalCardCountElem.innerText = "Total Cards: " + count;
+    totalCardCountElem.style.display = "flex"; // Ensure it's always visible
+  });
+}
+
 
 async function fetchAndStoreData() {
   // Retrieve field selections for Japanese, English, image, and audio.
@@ -378,10 +409,12 @@ async function fetchAndStoreData() {
     }
 
     progressBar.value = Math.round(((i + 1) / totalCards) * 100);
+    updateCardCount();
   }
 
   progressBar.style.display = "none";
-  resultDiv.innerText = `Data fetched and stored successfully! Total cards: ${totalCards}`;
+   resultDiv.innerText = `Data fetched and stored successfully!`;
+   updateCardCount();
   resultDiv.style.display = "block";
 }
 
@@ -392,6 +425,7 @@ async function fetchAndStoreData() {
 document.addEventListener("DOMContentLoaded", () => {
   fetchDecks();
   loadSettings();
+  updateCardCount(); 
 });
 document.getElementById("deckSelect").addEventListener("change", loadCardsAndFields);
 document.getElementById("fetchData").addEventListener("click", fetchAndStoreData);
@@ -444,6 +478,18 @@ document.getElementById("extensionEnabled").addEventListener("change", (e) => {
 document.getElementById("hideNativeSentence").addEventListener("change", (e) => {
   saveSetting("hideNativeSentence", e.target.checked);
 });
+document.getElementById("mediaBlockSize").addEventListener("input", function(e) {
+  const size = e.target.value;
+  document.getElementById("mediaBlockSizeValue").innerText = size + "px";
+  saveSetting("mediaBlockSize", size);
+});
+// document.getElementById("autoSync").addEventListener("change", (e) => {
+//   saveSetting("autoSync", e.target.checked);
+// });
+document.getElementById("showEnglishSentence").addEventListener("change", (e) => {
+  saveSetting("showEnglishSentence", !e.target.checked);
+});
+
 document.addEventListener("DOMContentLoaded", () => {
   const githubButton = document.getElementById("githubButton");
   if (githubButton) {
@@ -451,4 +497,12 @@ document.addEventListener("DOMContentLoaded", () => {
       window.open("https://github.com/felix-ops/JPDB-Media-Support");
     });
   }
+});
+
+document.getElementById("deckSelect").addEventListener("change", async function() {
+  await loadCardsAndFields();
+  // const autoSyncEnabled = await getSetting("autoSync", false);
+  // if (autoSyncEnabled) {
+  //   fetchAndStoreData();
+  // }
 });

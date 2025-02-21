@@ -109,7 +109,7 @@ async function fetchMediaFile(filename) {
         if (response && response.success) {
           resolve(response.result);
         } else {
-          console.error("Error fetching media file for", filename, response ? response.error : "No response", "(Make sure Anki is running)");
+          console.warn("Error fetching media file for", filename, response ? response.error : "No response", "(Make sure Anki is running)");
           resolve(null);
         }
       }
@@ -166,8 +166,22 @@ function createMediaBlock() {
   mediaBlock.style.display = "flex";
   mediaBlock.style.flexDirection = "column";
   mediaBlock.style.alignItems = "center";
-  mediaBlock.style.width = "650px";
-
+  
+  // Set the base width for which the design was made.
+  const baseWidth = 650;
+  mediaBlock.style.width = baseWidth + "px";
+  
+  // Set the transform origin so that scaling occurs from the top left.
+  mediaBlock.style.transformOrigin = "top right";
+  
+  // Apply the slider setting to scale the entire media block.
+  // The scale factor is computed as the saved slider value divided by the base width.
+  getSetting("mediaBlockSize", "650").then((size) => {
+    const scaleFactor = size / baseWidth;
+    mediaBlock.style.transform = `scale(${scaleFactor})`;
+  });
+  
+  // --- Create Image Container and Its Contents ---
   const imageContainer = document.createElement("div");
   imageContainer.style.position = "relative";
   imageContainer.style.display = "flex";
@@ -186,7 +200,7 @@ function createMediaBlock() {
     if (audioElem) {
       pauseOtherAudios(audioElem);
       audioElem.currentTime = 0;
-      audioElem.play().catch((error) => console.error("Audio play error:", error));
+      audioElem.play().catch((error) => console.warn("Audio play error:", error));
     }
   });
 
@@ -231,16 +245,20 @@ function createMediaBlock() {
   imageContainer.appendChild(imgElem);
   imageContainer.appendChild(rightButton);
 
+  // --- Create Context (Text) Container ---
   const contextElem = document.createElement("div");
   contextElem.style.display = "flex";
   contextElem.style.flexDirection = "column";
   contextElem.style.marginTop = "10px";
 
+  // Append sub-containers to media block.
   mediaBlock.appendChild(imageContainer);
   mediaBlock.appendChild(contextElem);
 
   return { mediaBlock, imageContainer, imgElem, leftButton, rightButton, cardCountElem, contextElem };
 }
+
+
 
 // ------------------------------
 // Setup Media Block (Preloading, Navigation, etc.)
@@ -262,7 +280,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
             preloadedImages[cardId] = objectUrl;
           }
         } catch (error) {
-          console.error("Error preloading image for card", cardId, error);
+          console.warn("Error preloading image for card", cardId, error);
         }
       }
     }
@@ -279,7 +297,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
             preloadedAudios[cardId] = audioData;
           }
         } catch (error) {
-          console.error("Error preloading audio for card", cardId, error);
+          console.warn("Error preloading audio for card", cardId, error);
         }
       }
     }
@@ -301,7 +319,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
 
   async function getTokensForContext(contextText) {
     const apiKey = await getSetting("jpdbApiKey", null).catch((error) => {
-      console.error(error);
+      console.warn(error);
       return null;
     });
     if (!apiKey) {
@@ -334,7 +352,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
       const data = await response.json();
       return { tokens: data.tokens || [], vocabulary: data.vocabulary || [] };
     } catch (error) {
-      console.error("Error fetching tokens from JPDB API:", error);
+      console.warn("Error fetching tokens from JPDB API:", error);
       return { tokens: [], vocabulary: [] };
     }
   }
@@ -386,7 +404,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
         if (audioElem) {
           pauseOtherAudios(audioElem);
           audioElem.currentTime = 0;
-          audioElem.play().catch((error) => console.error("Audio play error:", error));
+          audioElem.play().catch((error) => console.warn("Audio play error:", error));
         }
       });
       const spacer = document.createElement("div");
@@ -417,13 +435,13 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
                   if (error.name === "NotAllowedError") {
                     const playAfterInteraction = function () {
                       audioElem.play().catch((err) =>
-                        console.error("Auto-play after interaction failed:", err)
+                        console.warn("Auto-play after interaction failed:", err)
                       );
                       document.removeEventListener("click", playAfterInteraction);
                     };
                     document.addEventListener("click", playAfterInteraction);
                   } else {
-                    console.error("Audio play error:", error);
+                    console.warn("Audio play error:", error);
                   }
                 });
               }
@@ -431,7 +449,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
           }
         })
         .catch((error) => {
-          console.error("Error fetching audio:", error);
+          console.warn("Error fetching audio:", error);
         });
     }
   
@@ -482,22 +500,24 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
           jpSentence.innerHTML = newContextHtml;
         })
         .catch((error) => {
-          console.error("Error during tokenization:", error);
+          console.warn("Error during tokenization:", error);
         });
     }
   
     // Create and append English translation container below the Japanese sentence
-    if (englishText) {
-      const translationContainer = document.createElement("div");
-      translationContainer.style.display = "flex";
-      translationContainer.style.justifyContent = "center";
-      const translationDiv = document.createElement("div");
-      translationDiv.className = "sentence-translation";
-      translationDiv.style.textAlign = "center";
-      translationDiv.innerText = englishText;
-      translationContainer.appendChild(translationDiv);
-      elements.contextElem.appendChild(translationContainer);
-    }
+    getSetting("showEnglishSentence", true).then((showEnglish) => {
+      if (showEnglish && englishText) {
+        const translationContainer = document.createElement("div");
+        translationContainer.style.display = "flex";
+        translationContainer.style.justifyContent = "center";
+        const translationDiv = document.createElement("div");
+        translationDiv.className = "sentence-translation";
+        translationDiv.style.textAlign = "center";
+        translationDiv.innerText = englishText;
+        translationContainer.appendChild(translationDiv);
+        elements.contextElem.appendChild(translationContainer);
+      }
+    });
   
     // Handle image display
     if (cardData.image) {
@@ -527,7 +547,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
             }
           })
           .catch((error) => {
-            console.error("Error fetching image:", error);
+            console.warn("Error fetching image:", error);
           });
       }
     } else {
