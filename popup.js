@@ -124,7 +124,6 @@ async function fetchDecks() {
     }
   } catch (error) {
     deckSelect.innerHTML = '<option value="">-- Error loading decks --</option>';
-    console.warn("Error fetching decks:", error);
   }
 }
 
@@ -210,7 +209,6 @@ async function loadCardsAndFields() {
 
     
   } catch (error) {
-    console.warn("Error loading cards:", error);
   }
 }
 
@@ -259,7 +257,6 @@ async function getVidsFromContext(contextText) {
       return { vids, tokens: data.tokens, vocabulary: data.vocabulary };
     }
   } catch (error) {
-    console.warn("Error fetching JPDB data:", error);
   }
   return { vids: [], tokens: [], vocabulary: [] };
 }

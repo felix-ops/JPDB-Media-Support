@@ -109,7 +109,7 @@ async function fetchMediaFile(filename) {
         if (response && response.success) {
           resolve(response.result);
         } else {
-          console.warn("Error fetching media file for", filename, response ? response.error : "No response", "(Make sure Anki is running)");
+        
           resolve(null);
         }
       }
@@ -200,7 +200,7 @@ function createMediaBlock() {
     if (audioElem) {
       pauseOtherAudios(audioElem);
       audioElem.currentTime = 0;
-      audioElem.play().catch((error) => console.warn("Audio play error:", error));
+      audioElem.play();
     }
   });
 
@@ -211,7 +211,7 @@ function createMediaBlock() {
     background: "transparent",
     border: "none",
     color: "#007BFF",
-    fontSize: "24px",
+    fontSize: "30px",
     cursor: "pointer",
     boxShadow: "none",
     outline: "none"
@@ -280,7 +280,6 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
             preloadedImages[cardId] = objectUrl;
           }
         } catch (error) {
-          console.warn("Error preloading image for card", cardId, error);
         }
       }
     }
@@ -297,7 +296,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
             preloadedAudios[cardId] = audioData;
           }
         } catch (error) {
-          console.warn("Error preloading audio for card", cardId, error);
+          
         }
       }
     }
@@ -319,7 +318,6 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
 
   async function getTokensForContext(contextText) {
     const apiKey = await getSetting("jpdbApiKey", null).catch((error) => {
-      console.warn(error);
       return null;
     });
     if (!apiKey) {
@@ -352,7 +350,6 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
       const data = await response.json();
       return { tokens: data.tokens || [], vocabulary: data.vocabulary || [] };
     } catch (error) {
-      console.warn("Error fetching tokens from JPDB API:", error);
       return { tokens: [], vocabulary: [] };
     }
   }
@@ -404,7 +401,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
         if (audioElem) {
           pauseOtherAudios(audioElem);
           audioElem.currentTime = 0;
-          audioElem.play().catch((error) => console.warn("Audio play error:", error));
+          audioElem.play();
         }
       });
       const spacer = document.createElement("div");
@@ -434,14 +431,11 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
                 audioElem.play().catch((error) => {
                   if (error.name === "NotAllowedError") {
                     const playAfterInteraction = function () {
-                      audioElem.play().catch((err) =>
-                        console.warn("Auto-play after interaction failed:", err)
-                      );
+                      audioElem.play()
                       document.removeEventListener("click", playAfterInteraction);
                     };
                     document.addEventListener("click", playAfterInteraction);
                   } else {
-                    console.warn("Audio play error:", error);
                   }
                 });
               }
@@ -449,7 +443,6 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
           }
         })
         .catch((error) => {
-          console.warn("Error fetching audio:", error);
         });
     }
   
@@ -500,7 +493,6 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
           jpSentence.innerHTML = newContextHtml;
         })
         .catch((error) => {
-          console.warn("Error during tokenization:", error);
         });
     }
   
@@ -510,6 +502,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
         const translationContainer = document.createElement("div");
         translationContainer.style.display = "flex";
         translationContainer.style.justifyContent = "center";
+        translationContainer.style.color = "#868686"
         const translationDiv = document.createElement("div");
         translationDiv.className = "sentence-translation";
         translationDiv.style.textAlign = "center";
@@ -547,7 +540,6 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
             }
           })
           .catch((error) => {
-            console.warn("Error fetching image:", error);
           });
       }
     } else {
@@ -566,6 +558,14 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
   elements.rightButton.addEventListener("click", () => {
     currentCardIndex = (currentCardIndex + 1) % cardIds.length;
     loadCard(currentCardIndex);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowLeft") {
+      elements.leftButton.click(); // Simulate click on left button
+    } else if (event.key === "ArrowRight") {
+      elements.rightButton.click(); // Simulate click on right button
+    }
   });
 }
 
@@ -612,6 +612,7 @@ async function insertMediaInReview() {
   const elements = createMediaBlock();
   // Adjust insertion point as needed. Here we try to insert next to the vocabulary section.
   const mainContent = document.querySelector(".result.vocabulary .vbox.gap");
+  document.body.style.maxWidth = "75rem";
   if (mainContent) {
     const wrapper = document.createElement("div");
     wrapper.style.display = "flex";
