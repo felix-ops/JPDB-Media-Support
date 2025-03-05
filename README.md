@@ -14,7 +14,9 @@ This extension enables users to fetch media from existing **Anki** decks and dis
 ## Demo
 https://github.com/user-attachments/assets/015ffdb5-ca37-458b-8345-2e13f8a0863a
 
-
+## Tip:
+- If you find it really hassle to mine using asbplayer or subs2srs.  There's a awesome collection of anime Anki decks created by "Jo-Mako", import those decks and use them with this extension. 
+**[Anki Decks Collection for Anime](https://docs.google.com/spreadsheets/d/1ukDIWSkh_xvpppPbgs1nUR2kaEwFaWlsJgZUlb9LuTs/edit?gid=822742203#gid=822742203)**
 
 ## Features
 - Seamless integration of **images, audio, and sentence media** from Anki into JPDB.
