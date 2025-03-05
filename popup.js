@@ -224,43 +224,6 @@ function populateFieldDropdown(selectId, fieldNames) {
   });
 }
 
-async function getVidsFromContext(contextText) {
-  const jpdbUrl = "https://jpdb.io/api/v1/parse";
-  const token = document.getElementById("jpdbApiKey").value.trim();
-
-  try {
-    const response = await fetch(jpdbUrl, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        text: contextText,
-        token_fields: ["vocabulary_index", "position", "length", "furigana"],
-        position_length_encoding: "utf16",
-        vocabulary_fields: [
-          "vid",
-          "sid",
-          "rid",
-          "spelling",
-          "reading",
-          "frequency_rank",
-          "meanings"
-        ]
-      })
-    });
-    const data = await response.json();
-    if (data.vocabulary && Array.isArray(data.vocabulary)) {
-      const vids = data.vocabulary.map((vocab) => String(vocab[0]));
-      return { vids, tokens: data.tokens, vocabulary: data.vocabulary };
-    }
-  } catch (error) {
-  }
-  return { vids: [], tokens: [], vocabulary: [] };
-}
-
 function extractImageFilename(imageHTML) {
   if (!imageHTML) return "";
   const tempDiv = document.createElement("div");
@@ -319,6 +282,58 @@ function updateCardCount() {
   });
 }
 
+function chunkArray(array, chunkSize) {
+  const chunks = [];
+  for (let i = 0; i < array.length; i += chunkSize) {
+    chunks.push(array.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
+
+
+async function getVidsFromContext(contextTexts) {
+  // contextTexts is an array of Japanese texts (max length: 100)
+  const jpdbUrl = "https://jpdb.io/api/v1/parse";
+  const token = document.getElementById("jpdbApiKey").value.trim();
+
+  try {
+    const response = await fetch(jpdbUrl, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        text: contextTexts, // send an array of texts (max 100 per request)
+        token_fields: ["vocabulary_index"],
+        position_length_encoding: "utf16",
+        vocabulary_fields: ["vid"]
+      })
+    });
+    const data = await response.json();
+    if (
+      data.vocabulary &&
+      Array.isArray(data.vocabulary) &&
+      data.tokens &&
+      Array.isArray(data.tokens)
+    ) {
+      // Create an array where each element corresponds to one text's vids.
+      const vidsForCards = data.tokens.map((tokenList) => {
+        // tokenList is an array of tokens for one text.
+        // Each token is an array with one element: the index into data.vocabulary.
+        return tokenList.map((token) => {
+          const vocabIndex = token[0];
+          return String(data.vocabulary[vocabIndex][0]);
+        });
+      });
+      return { vidsForCards, tokens: data.tokens, vocabulary: data.vocabulary };
+    }
+  } catch (error) {
+    console.error("Error in getVidsFromContext:", error);
+  }
+  return { vidsForCards: [] };
+}
 
 async function fetchAndStoreData() {
   // Retrieve field selections for Japanese, English, image, and audio.
@@ -350,6 +365,29 @@ async function fetchAndStoreData() {
   progressBar.value = 0;
   const totalCards = window.fetchedCards.length;
 
+  // Build an array of cleaned Japanese texts from each card.
+  const japaneseTexts = window.fetchedCards.map(card => {
+    const rawJapaneseText = card.fields[japaneseField].value.trim();
+    return stripJapaneseHtml(rawJapaneseText);
+  });
+
+  // Chunk the texts into groups of 100.
+  const textChunks = chunkArray(japaneseTexts, 100);
+  let allVidsForCards = [];
+
+  // Process each chunk sequentially.
+  for (const chunk of textChunks) {
+    const jpdbData = await getVidsFromContext(chunk);
+    if (jpdbData && jpdbData.vidsForCards) {
+      allVidsForCards.push(...jpdbData.vidsForCards);
+    }
+  }
+
+  // Make sure we have the same number of results as cards.
+  if (allVidsForCards.length !== totalCards) {
+    console.warn("The number of results does not match the number of cards.");
+  }
+
   for (let i = 0; i < totalCards; i++) {
     const card = window.fetchedCards[i];
     const cardId = card.cardId;
@@ -378,16 +416,15 @@ async function fetchAndStoreData() {
     ) {
       // Existing record is up-to-date; no need to update.
     } else {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      // Use the processed Japanese text for JPDB token extraction.
-      const jpdbData = japaneseText ? await getVidsFromContext(japaneseText) : { vids: [] };
+      // Use the pre-fetched vids for this card (or an empty array if none)
+      const cardVids = allVidsForCards[i] || [];
       newCardData = {
         cardId,
         japaneseContext: japaneseText,
         englishContext: englishText,
         image: imageFilename,
         audio: audioFilename,
-        vids: jpdbData.vids
+        vids: cardVids
       };
       await db.cards.put(newCardData);
     }
@@ -410,8 +447,8 @@ async function fetchAndStoreData() {
   }
 
   progressBar.style.display = "none";
-   resultDiv.innerText = `Data fetched and stored successfully!`;
-   updateCardCount();
+  resultDiv.innerText = `Data fetched and stored successfully!`;
+  updateCardCount();
   resultDiv.style.display = "block";
 }
 
@@ -498,8 +535,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
 document.getElementById("deckSelect").addEventListener("change", async function() {
   await loadCardsAndFields();
-  // const autoSyncEnabled = await getSetting("autoSync", false);
-  // if (autoSyncEnabled) {
-  //   fetchAndStoreData();
-  // }
+});
+
+document.getElementById("deleteData").addEventListener("click", async function() {
+  if (confirm("Clearing the Data from here is totally safe and will not affect the Anki decks in any way.  It will only remove the relation in the extension's database")) {
+    try {
+      await db.cards.clear();
+      await db.vids.clear();
+      updateCardCount(); // Refresh the card count display
+      alert("Cards data have been cleared.");
+    } catch (error) {
+      alert("An error occurred while deleting data.");
+    }
+  }
 });

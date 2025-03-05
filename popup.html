@@ -111,6 +111,23 @@
       word-break: break-all;
       display: none; /* Only show when required */
     }
+    #deleteData {
+      width: 100%;
+      padding: 10px;
+      background: none;
+      border: 1px solid #df0000;
+      border-radius: 6px;
+      color: #df0000;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.3s, color 0.3s;
+      margin-bottom: 15px;
+    }
+
+    #deleteData:hover {
+      background: #df0000;
+      color: #000000;
+    }
     /* Material-style switch for audio */
     .switch {
       position: relative;
@@ -296,9 +313,9 @@
       </div>
     </div>
     
-    
+    <button id="deleteData">Clear Data</button>
     <div class="button-group">
-      <button id="saveConfigButton">Save Config</button>
+      <button id="saveConfigButton">Download Config</button>
       <button id="loadConfigButton">Load Config</button>
     </div>
     <input type="file" id="configFileInput" accept="application/json" style="display:none;">
