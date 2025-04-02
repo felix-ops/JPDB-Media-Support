@@ -466,22 +466,31 @@ document.getElementById("fetchData").addEventListener("click", fetchAndStoreData
 document.getElementById("jpdbApiKey").addEventListener("change", (e) => {
   saveSetting("jpdbApiKey", e.target.value.trim());
 });
+
 document.getElementById("saveConfigButton").addEventListener("click", async () => {
   const settings = await db.settings.toArray();
   const cards = await db.cards.toArray();
   const vids = await db.vids.toArray();
   const configData = { settings, cards, vids };
   const json = JSON.stringify(configData, null, 2);
+
+  // Get the total card count from the database
+  const totalCardCount = await db.cards.count();
+
+  // Create the filename with the total card count
+  const filename = `JPDB_Media_Config_${totalCardCount}.json`;
+
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "JPDB_Media_Support_Config.json";
+  a.download = filename; // Use the dynamic filename here
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 });
+
 document.getElementById("loadConfigButton").addEventListener("click", () => {
   document.getElementById("configFileInput").click();
 });
