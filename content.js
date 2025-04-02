@@ -211,7 +211,7 @@ function createMediaBlock() {
     background: "transparent",
     border: "none",
     color: "#007BFF",
-    fontSize: "30px",
+    fontSize: "20px",
     cursor: "pointer",
     boxShadow: "none",
     outline: "none"
@@ -296,7 +296,6 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
             preloadedAudios[cardId] = audioData;
           }
         } catch (error) {
-          
         }
       }
     }
@@ -431,7 +430,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
                 audioElem.play().catch((error) => {
                   if (error.name === "NotAllowedError") {
                     const playAfterInteraction = function () {
-                      audioElem.play()
+                      audioElem.play();
                       document.removeEventListener("click", playAfterInteraction);
                     };
                     document.addEventListener("click", playAfterInteraction);
@@ -502,7 +501,7 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
         const translationContainer = document.createElement("div");
         translationContainer.style.display = "flex";
         translationContainer.style.justifyContent = "center";
-        translationContainer.style.color = "#868686"
+        translationContainer.style.color = "#868686";
         const translationDiv = document.createElement("div");
         translationDiv.className = "sentence-translation";
         translationDiv.style.textAlign = "center";
@@ -512,8 +511,16 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
       }
     });
   
-    // Handle image display
+    // Handle image display with fixed size
     if (cardData.image) {
+      // Set fixed size for the image element
+      // elements.imgElem.style.width = "450px"; // Set desired width
+      elements.imgElem.style.height = "275px"; // Set desired height
+      elements.imgElem.style.objectFit = "contain"; // Maintain aspect ratio
+      elements.imgElem.style.maxWidth = "100%"; // Ensure it fits container
+      elements.imgElem.style.maxHeight = "100%"; // Ensure it fits container
+
+
       if (preloadedImages[cardId]) {
         elements.imgElem.src = preloadedImages[cardId];
         elements.imgElem.style.opacity = 1;
@@ -548,7 +555,6 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     }
   }
   
-  
   loadCard(currentCardIndex);
 
   elements.leftButton.addEventListener("click", () => {
@@ -568,7 +574,6 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     }
   });
 }
-
 function extractVidFromPlainHtml() {
   // Look for an anchor with the "plain" class that has an href starting with "/vocabulary/"
   const plainLink = document.querySelector('a.plain[href^="/vocabulary/"]');
