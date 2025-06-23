@@ -635,6 +635,21 @@ async function insertMediaInReview() {
   }
 
   const cardsMapping = await getCardsMapping(cardIds);
+
+  // Prioritize cards from the "JPDB Media" deck.
+  cardIds.sort((a, b) => {
+    const cardA = cardsMapping[a];
+    const cardB = cardsMapping[b];
+
+    const isAPriority = cardA && cardA.deckName === "JPDB Media";
+    const isBPriority = cardB && cardB.deckName === "JPDB Media";
+
+    if (isAPriority && !isBPriority) return -1; // a comes first
+    if (!isAPriority && isBPriority) return 1;  // b comes first
+    
+    return 0; // maintain original relative order
+  });
+
   setupMediaBlock(vid, { cards: cardsMapping }, cardIds, elements);
 }
 
@@ -655,6 +670,21 @@ async function insertMediaInVocabularyPage() {
     document.body.appendChild(elements.mediaBlock);
   }
   const cardsMapping = await getCardsMapping(cardIds);
+
+  // Prioritize cards from the "JPDB Media" deck.
+  cardIds.sort((a, b) => {
+    const cardA = cardsMapping[a];
+    const cardB = cardsMapping[b];
+
+    const isAPriority = cardA && cardA.deckName === "JPDB Media";
+    const isBPriority = cardB && cardB.deckName === "JPDB Media";
+
+    if (isAPriority && !isBPriority) return -1; // a comes first
+    if (!isAPriority && isBPriority) return 1;  // b comes first
+    
+    return 0; // maintain original relative order
+  });
+
   setupMediaBlock(vid, { cards: cardsMapping }, cardIds, elements);
 }
 

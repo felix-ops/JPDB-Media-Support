@@ -343,6 +343,7 @@ async function fetchAndStoreData() {
   const audioField = document.getElementById("audioFieldSelect").value;
   const resultDiv = document.getElementById("result");
   const progressBar = document.getElementById("progressBar");
+  const deckName = document.getElementById("deckSelect").value;
 
   // Save field settings
   saveSetting("selectedJapaneseField", japaneseField);
@@ -412,7 +413,8 @@ async function fetchAndStoreData() {
       newCardData.japaneseContext === japaneseText &&
       newCardData.englishContext === englishText &&
       newCardData.image === imageFilename &&
-      newCardData.audio === audioFilename
+      newCardData.audio === audioFilename &&
+      newCardData.deckName === deckName
     ) {
       // Existing record is up-to-date; no need to update.
     } else {
@@ -420,6 +422,7 @@ async function fetchAndStoreData() {
       const cardVids = allVidsForCards[i] || [];
       newCardData = {
         cardId,
+        deckName: deckName,
         japaneseContext: japaneseText,
         englishContext: englishText,
         image: imageFilename,
