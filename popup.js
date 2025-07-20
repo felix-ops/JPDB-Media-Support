@@ -351,7 +351,7 @@ async function fetchAndStoreData() {
   saveSetting("selectedImageField", imageField);
   saveSetting("selectedAudioField", audioField);
 
-  if (!japaneseField || !englishField || !imageField || !audioField) {
+  if (!japaneseField) {
     alert("Please select fields for Japanese, English, image, and audio.");
     return;
   }
@@ -394,10 +394,14 @@ async function fetchAndStoreData() {
     const cardId = card.cardId;
 
     // Retrieve raw HTML from the selected fields.
-    const rawJapaneseText = card.fields[japaneseField].value.trim();
-    const rawEnglishText = card.fields[englishField].value.trim();
-    const rawImageText = card.fields[imageField].value.trim();
-    const rawAudioText = card.fields[audioField].value.trim();
+    const rawJapaneseText = japaneseField
+      ? card.fields[japaneseField].value.trim()
+      : "";
+    const rawEnglishText = englishField
+      ? card.fields[englishField].value.trim()
+      : "";
+    const rawImageText = imageField ? card.fields[imageField].value.trim() : "";
+    const rawAudioText = audioField ? card.fields[audioField].value.trim() : "";
 
     // Process texts using the provided functions.
     const japaneseText = stripJapaneseHtml(rawJapaneseText);
