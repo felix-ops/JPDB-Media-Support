@@ -254,7 +254,20 @@ function createMediaBlock() {
   cardCountElem.style.fontSize = "14px";
   cardCountElem.style.zIndex = "10";
   cardCountElem.style.display = "none";
+  cardCountElem.style.userSelect = "none";
   cardCountElem.innerText = `1/0`;
+  cardCountElem.style.transition = "opacity 0.3s ease";
+  const styleId = "jpdb-media-hover-styles";
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+      #${cardCountElem.id}:hover {
+        opacity: 0;
+      }
+    `;
+    document.head.appendChild(style);
+  }
 
   imageContainer.appendChild(cardCountElem);
   imageContainer.appendChild(leftButton);
