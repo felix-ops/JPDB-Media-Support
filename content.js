@@ -215,6 +215,23 @@ function createMediaBlock() {
     }
   });
 
+  // --- NEW: Create the Deck Name Element ---
+  const deckNameElem = document.createElement("div");
+  deckNameElem.id = "jpdb-deck-name";
+  deckNameElem.style.position = "absolute";
+  deckNameElem.style.top = "5px";
+  deckNameElem.style.left = "50%";
+  deckNameElem.style.transform = "translateX(-50%)";
+  deckNameElem.style.backgroundColor = "rgba(0,0,0,0.6)";
+  deckNameElem.style.color = "#bbbbbb";
+  deckNameElem.style.padding = "2px 8px";
+  deckNameElem.style.borderRadius = "3px";
+  deckNameElem.style.fontSize = "14px";
+  deckNameElem.style.zIndex = "10";
+  deckNameElem.style.display = "none";
+  deckNameElem.style.userSelect = "none";
+  deckNameElem.style.transition = "opacity 0.3s ease";
+
   const btnStyle = {
     position: "absolute",
     top: "50%",
@@ -248,13 +265,28 @@ function createMediaBlock() {
   cardCountElem.style.borderRadius = "3px";
   cardCountElem.style.fontSize = "14px";
   cardCountElem.style.zIndex = "10";
-  cardCountElem.style.display = "none";
+  cardCountElem.style.display = "block";
+  cardCountElem.style.userSelect = "none";
   cardCountElem.innerText = `1/0`;
+  cardCountElem.style.transition = "opacity 0.3s ease";
+  const styleId = "jpdb-media-hover-styles";
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+      #${cardCountElem.id}:hover,
+      #${deckNameElem.id}:hover {
+        opacity: 0;
+      }
+    `;
+    document.head.appendChild(style);
+  }
 
   imageContainer.appendChild(cardCountElem);
   imageContainer.appendChild(leftButton);
   imageContainer.appendChild(imgElem);
   imageContainer.appendChild(rightButton);
+  // imageContainer.appendChild(deckNameElem); //uncomment to show deck name on cards
 
   const contextElem = document.createElement("div");
   contextElem.style.display = "flex";
@@ -280,7 +312,8 @@ function createMediaBlock() {
     rightButton,
     cardCountElem,
     contextElem,
-    audioElem, // Return the persistent audio element
+    audioElem,
+    deckNameElem,
   };
 }
 
@@ -351,13 +384,21 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     // Pause and reset the single audio element before loading new content.
     audioElem.pause();
     audioElem.currentTime = 0;
-    audioElem.src = ""; // Important: Clear the old source
+    audioElem.src = "";
 
     const cardId = cardIds[index];
     if (!jpdbData.cards || !jpdbData.cards[cardId]) {
       return;
     }
     const cardData = jpdbData.cards[cardId];
+
+    const deckNameElem = elements.deckNameElem;
+    if (cardData.deckName) {
+      deckNameElem.innerText = cardData.deckName;
+      deckNameElem.style.display = "block";
+    } else {
+      deckNameElem.style.display = "none";
+    }
 
     const japaneseText = cardData.japaneseContext || "";
     const englishText = cardData.englishContext || "";

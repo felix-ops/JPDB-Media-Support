@@ -385,6 +385,9 @@ async function fetchAndStoreData() {
   const progressBar = document.getElementById("progressBar");
   const deckName = document.getElementById("deckSelect").value;
 
+  const deckNameParts = deckName.split("::");
+  const formattedDeckName = deckNameParts[deckNameParts.length - 1];
+
   saveSetting("selectedJapaneseField", japaneseField);
   saveSetting("selectedEnglishField", englishField);
   saveSetting("selectedImageField", imageField);
@@ -403,21 +406,20 @@ async function fetchAndStoreData() {
   progressBar.style.display = "block";
   progressBar.value = 0;
   resultDiv.style.display = "block";
-  resultDiv.innerText = "Scanning for required updates...";
+  resultDiv.innerText = "Scanning for updates...";
 
   // ====================================================================
   // UNIFIED SCANNING PHASE
   // ====================================================================
 
   const ankiCards = window.fetchedCards;
-  // This is the key optimization: read from separate tables in parallel.
   const [allDbCards, mediaKeys] = await Promise.all([
-    db.cards.toArray(), // VERY FAST: Reads only lightweight metadata.
-    db.media.toCollection().keys(), // VERY FAST: Reads only the primary keys.
+    db.cards.toArray(),
+    db.media.toCollection().keys(),
   ]);
 
   const allDbCardsMap = new Map(allDbCards.map((c) => [c.cardId, c]));
-  const mediaIdSet = new Set(mediaKeys); // A fast set for checking existence.
+  const mediaIdSet = new Set(mediaKeys);
   const ankiCardIds = new Set(ankiCards.map((c) => c.cardId));
 
   const deckCardsToProcess = [];
@@ -510,7 +512,7 @@ async function fetchAndStoreData() {
 
   let allFetchedMedia = {};
   if (filenamesToFetch.size > 0) {
-    const filenameChunks = chunkArray(Array.from(filenamesToFetch), 500);
+    const filenameChunks = chunkArray(Array.from(filenamesToFetch), 100);
     for (let i = 0; i < filenameChunks.length; i++) {
       allFetchedMedia = {
         ...allFetchedMedia,
@@ -529,7 +531,7 @@ async function fetchAndStoreData() {
     const c = deckCardsToProcess[i];
     cardsToStore.push({
       cardId: c.ankiCard.cardId,
-      deckName,
+      deckName: formattedDeckName,
       japaneseContext: c.newJapaneseText,
       englishContext: c.newEnglishText,
       image: c.newImageFile,
@@ -582,7 +584,7 @@ async function fetchAndStoreData() {
   progressBar.style.display = "none";
   let finalMessage = `Sync complete: ${
     deckCardsToProcess.length + globalCardsToFix.length
-  } were added.`;
+  } cards were added.`;
   resultDiv.innerText = finalMessage;
   updateCardCount();
 }
