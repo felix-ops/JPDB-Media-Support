@@ -1,266 +1,275 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>JPDB Media Importer</title>
-  <style>
-    /* Global styles */
-    html, body {
-      margin: 1;
-      padding: 5px;
-      background-color: #181818;
-      color: #bbbbbb;
-      font-family: 'Roboto', sans-serif;
-    }
-    .container {
-      width: 100%;
-      max-width: 800px;
-      min-width: 400px;
-      margin: 0 auto;
-    }
-    h2 {
-      color: #cccccc;
-      text-align: center;
-      margin-bottom: 20px;
-      font-size: 24px;
-    }
-    .form-group {
-      margin-bottom: 15px;
-      color: #888888;
-    }
-    label {
-      display: block;
-      font-size: 12px;
-      margin-bottom: 4px;
-    }
-    input[type="text"],
-    select {
-      width: 100%;
-      padding: 8px;
-      background: none;
-      border: none;
-      /* Set the default line color for dropdown */
-      border-bottom: 1px solid #888888;
-      color: #bbbbbb;
-      font-size: 14px;
-      outline: none;
-      transition: border-bottom-color 0.3s;
-      -webkit-appearance: none;
-      -moz-appearance: none;
-      appearance: none;
-    }
-    input[type="text"]::placeholder {
-      color: #bbbbbb;
-      opacity: 0.7;
-    }
-    /* Change dropdown underline on hover */
-    select:hover {
-      cursor: pointer;
-      border-bottom-color: #4b8dff;
-    }
-    /* Dropdown focus style can remain if desired */
-    select:focus {
-      border-bottom-color: #4b8dff;
-    }
-    /* Dropdown options themed as much as possible */
-    select option {
-      background-color: #181818;
-      color: #888888; /* Duller option text */
-      font-size: 12px;
-    }
-    button {
-      width: 100%;
-      padding: 10px;
-      background: none;
-      border: 1px solid #4b8dff;
-      border-radius: 6px;
-      color: #4b8dff;
-      font-size: 14px;
-      cursor: pointer;
-      transition: background 0.3s, color 0.3s;
-      margin-bottom: 15px;
-    }
-    button:hover {
-      background: #4b8dff;
-      color: #181818;
-    }
-    progress {
-      width: 100%;
-      height: 20px;
-      margin-top: 10px;
-      border: 1px solid #4b8dff;
-      background: none;
-      display: none; /* Hidden unless needed */
-    }
-    progress::-webkit-progress-bar {
-      background-color: #181818;
-    }
-    progress::-webkit-progress-value {
-      background-color: #4b8dff;
-    }
-    #progressBar {
-      margin: 20px auto;    /* Center horizontally with auto left/right margins and add vertical spacing */
-    }
-    #result {
-      margin-bottom: 10px;
-      border: 0px solid #4b8dff;
-      color: #888888;
-      border-radius: 4px;
-      font-size: 13px;
-      word-break: break-all;
-      display: none; /* Only show when required */
-    }
-    #deleteData {
-      width: 100%;
-      padding: 10px;
-      background: none;
-      border: 1px solid #df0000;
-      border-radius: 6px;
-      color: #df0000;
-      font-size: 14px;
-      cursor: pointer;
-      transition: background 0.3s, color 0.3s;
-      margin-bottom: 15px;
-    }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JPDB Media Importer</title>
+    <style>
+      /* Global styles */
+      html,
+      body {
+        margin: 1;
+        padding: 5px;
+        background-color: #181818;
+        color: #bbbbbb;
+        font-family: "Roboto", sans-serif;
+      }
+      .container {
+        width: 100%;
+        max-width: 800px;
+        min-width: 400px;
+        margin: 0 auto;
+      }
+      h2 {
+        color: #cccccc;
+        text-align: center;
+        margin-bottom: 20px;
+        font-size: 24px;
+      }
+      .form-group {
+        margin-bottom: 15px;
+        color: #888888;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        margin-bottom: 4px;
+      }
+      input[type="text"],
+      select {
+        width: 100%;
+        padding: 8px;
+        background: none;
+        border: none;
+        /* Set the default line color for dropdown */
+        border-bottom: 1px solid #888888;
+        color: #bbbbbb;
+        font-size: 14px;
+        outline: none;
+        transition: border-bottom-color 0.3s;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+      }
+      input[type="text"]::placeholder {
+        color: #bbbbbb;
+        opacity: 0.7;
+      }
+      /* Change dropdown underline on hover */
+      select:hover {
+        cursor: pointer;
+        border-bottom-color: #4b8dff;
+      }
+      /* Dropdown focus style can remain if desired */
+      select:focus {
+        border-bottom-color: #4b8dff;
+      }
+      /* Dropdown options themed as much as possible */
+      select option {
+        background-color: #181818;
+        color: #888888; /* Duller option text */
+        font-size: 12px;
+      }
+      button {
+        width: 100%;
+        padding: 10px;
+        background: none;
+        border: 1px solid #4b8dff;
+        border-radius: 6px;
+        color: #4b8dff;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background 0.3s, color 0.3s;
+        margin-bottom: 15px;
+      }
+      button:hover {
+        background: #4b8dff;
+        color: #181818;
+      }
+      progress {
+        width: 100%;
+        height: 20px;
+        margin-top: 10px;
+        border: 1px solid #4b8dff;
+        background: none;
+        display: none; /* Hidden unless needed */
+      }
+      progress::-webkit-progress-bar {
+        background-color: #181818;
+      }
+      progress::-webkit-progress-value {
+        background-color: #4b8dff;
+      }
+      #progressBar {
+        margin: 20px auto; /* Center horizontally with auto left/right margins and add vertical spacing */
+      }
+      #result {
+        margin-bottom: 10px;
+        border: 0px solid #4b8dff;
+        color: #888888;
+        border-radius: 4px;
+        font-size: 13px;
+        word-break: break-all;
+        display: none; /* Only show when required */
+      }
+      #deleteData {
+        width: 100%;
+        padding: 10px;
+        background: none;
+        border: 1px solid #df0000;
+        border-radius: 6px;
+        color: #df0000;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background 0.3s, color 0.3s;
+        margin-bottom: 15px;
+      }
 
-    #deleteData:hover {
-      background: #df0000;
-      color: #000000;
-    }
-    /* Material-style switch for audio */
-    .switch {
-      position: relative;
-      display: inline-block;
-      width: 50px;
-      height: 28px;
-      vertical-align: middle;
-      margin-right: 10px;
-    }
-    .switch input { 
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-    .slider {
-      position: absolute;
-      cursor: pointer;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: #555555;
-      transition: 0.4s;
-      border-radius: 34px;
-    }
-    .slider:before {
-      position: absolute;
-      content: "";
-      height: 22px;
-      width: 22px;
-      left: 3px;
-      bottom: 3px;
-      background-color: #181818;
-      transition: 0.4s;
-      border-radius: 50%;
-    }
-    input:checked + .slider {
-      background-color: #4b8dff;
-    }
-    input:checked + .slider:before {
-      transform: translateX(22px);
-    }
-    /* Updated switch label styling */
-    .switch-label {
-      font-size: 14px; /* Larger text */
-      color: #bbbbbb;
-      margin: 0;
-    }
-    /* Flex container for switch elements */
-    .switch-container {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .button-group {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 0px;
-    }
-    .button-group button {
-      flex: 1;
-    }
-    /* Custom arrow for dropdown */
-    select {
-      background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='5'%3E%3Cpolygon points='0,0 10,0 5,5' fill='%23888888'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 8px center;
-      background-size: 10px 5px;
-      padding-right: 20px;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <!-- <h2>JPDB Media Importer</h2> -->
-    
-    <!-- Enable Extension Switch -->
-    <div class="form-group switch-container">
-      <span class="switch-label">JPDB Media Support Extension</span>
-      <label class="switch">
-        <input type="checkbox" id="extensionEnabled" checked>
-        <span class="slider"></span>
-      </label>
-    </div>
+      #deleteData:hover {
+        background: #df0000;
+        color: #000000;
+      }
+      /* Material-style switch for audio */
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 50px;
+        height: 28px;
+        vertical-align: middle;
+        margin-right: 10px;
+      }
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #555555;
+        transition: 0.4s;
+        border-radius: 34px;
+      }
+      .slider:before {
+        position: absolute;
+        content: "";
+        height: 22px;
+        width: 22px;
+        left: 3px;
+        bottom: 3px;
+        background-color: #181818;
+        transition: 0.4s;
+        border-radius: 50%;
+      }
+      input:checked + .slider {
+        background-color: #4b8dff;
+      }
+      input:checked + .slider:before {
+        transform: translateX(22px);
+      }
+      /* Updated switch label styling */
+      .switch-label {
+        font-size: 14px; /* Larger text */
+        color: #bbbbbb;
+        margin: 0;
+      }
+      /* Flex container for switch elements */
+      .switch-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .button-group {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 0px;
+      }
+      .button-group button {
+        flex: 1;
+      }
+      /* Custom arrow for dropdown */
+      select {
+        background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='5'%3E%3Cpolygon points='0,0 10,0 5,5' fill='%23888888'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 8px center;
+        background-size: 10px 5px;
+        padding-right: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- <h2>JPDB Media Importer</h2> -->
 
-    <div class="form-group">
-      <label for="jpdbApiKey">JPDB API Key</label>
-      <input type="text" id="jpdbApiKey" placeholder="Enter JPDB API Key" value="">
-    </div>
+      <!-- Enable Extension Switch -->
+      <div class="form-group switch-container">
+        <span class="switch-label">JPDB Media Support Extension</span>
+        <label class="switch">
+          <input type="checkbox" id="extensionEnabled" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
 
-    <div class="form-group">
-      <label for="url">Anki Connect URL</label>
-      <input type="text" id="url" placeholder="http://localhost:8765" value="http://localhost:8765">
-    </div>
-    
-    <div class="form-group">
-      <label for="deckSelect">Select Deck</label>
-      <select id="deckSelect">
-        <option value="">-- Loading decks --</option>
-      </select>
-    </div>
-    
-    <div class="form-group">
-      <label for="japaneseFieldSelect">Japanese Sentence Field</label>
-      <select id="japaneseFieldSelect">
-        <option value="">-- Select Japanese field --</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label for="englishFieldSelect">Translated Sentence Field</label>
-      <select id="englishFieldSelect">
-        <option value="">-- Select English field --</option>
-      </select>
-    </div>
-    
-    <div class="form-group">
-      <label for="imageFieldSelect">Image Field</label>
-      <select id="imageFieldSelect">
-        <option value="">-- Select image field --</option>
-      </select>
-    </div>
-    
-    <div class="form-group">
-      <label for="audioFieldSelect">Audio Field</label>
-      <select id="audioFieldSelect">
-        <option value="">-- Select audio field --</option>
-      </select>
-    </div>
+      <div class="form-group">
+        <label for="jpdbApiKey">JPDB API Key</label>
+        <input
+          type="text"
+          id="jpdbApiKey"
+          placeholder="Enter JPDB API Key"
+          value=""
+        />
+      </div>
 
+      <div class="form-group">
+        <label for="url">Anki Connect URL</label>
+        <input
+          type="text"
+          id="url"
+          placeholder="http://localhost:8765"
+          value="http://localhost:8765"
+        />
+      </div>
 
+      <div class="form-group">
+        <label for="deckSelect">Select Deck</label>
+        <select id="deckSelect">
+          <option value="">-- Loading decks --</option>
+        </select>
+      </div>
 
-    <!-- Auto Sync with Anki Switch -->
-<!-- <div class="form-group switch-container">
+      <div class="form-group">
+        <label for="japaneseFieldSelect">Japanese Sentence Field</label>
+        <select id="japaneseFieldSelect">
+          <option value="">-- Select Japanese field --</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="englishFieldSelect">Translated Sentence Field</label>
+        <select id="englishFieldSelect">
+          <option value="">-- Select English field --</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="imageFieldSelect">Image Field</label>
+        <select id="imageFieldSelect">
+          <option value="">-- Select image field --</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="audioFieldSelect">Audio Field</label>
+        <select id="audioFieldSelect">
+          <option value="">-- Select audio field --</option>
+        </select>
+      </div>
+
+      <!-- Auto Sync with Anki Switch -->
+      <!-- <div class="form-group switch-container">
   <span class="switch-label">Auto Sync with Anki</span>
   <label class="switch">
     <input type="checkbox" id="autoSync">
@@ -268,62 +277,93 @@
   </label>
 </div> -->
 
-<div id="totalCardCount" style="margin-bottom: 10px; display: flex; align-items: center; justify-content: center; height: 100%; font-size: 13px; color: #888888;"></div>
+      <div
+        id="totalCardCount"
+        style="
+          margin-bottom: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          font-size: 13px;
+          color: #888888;
+        "
+      ></div>
 
+      <progress id="progressBar" value="0" max="100"></progress>
 
+      <button id="fetchData">Fetch Data From Anki</button>
+      <div id="result"></div>
 
-<progress id="progressBar" value="0" max="100"></progress>
-
-    <button id="fetchData">Fetch Data From Anki</button>
-    <div id="result"></div>
-
-    
-    <!-- Auto Play Audio Switch -->
-    <div class="form-group switch-container">
-      <span class="switch-label">Auto Play Audio</span>
-      <label class="switch">
-        <input type="checkbox" id="autoPlayAudio">
-        <span class="slider"></span>
-      </label>
-    </div>
-
-    <!-- Show English Sentence Switch -->
-<div class="form-group switch-container">
-  <span class="switch-label">Hide Media Translation</span>
-  <label class="switch">
-    <input type="checkbox" id="showEnglishSentence" checked>
-    <span class="slider"></span>
-  </label>
-</div>
-    
-    <!-- Hide Native Sentence Switch -->
-    <div class="form-group switch-container">
-      <span class="switch-label">Hide JPDB's Sentence Block</span>
-      <label class="switch">
-        <input type="checkbox" id="hideNativeSentence" checked>
-        <span class="slider"></span>
-      </label>
-    </div>
-
-    <div class="form-group" style="display: flex; flex-direction: column; margin-bottom: 15px;">
-      <label for="mediaBlockSize" style="font-size: 14px; color: #cccccc; margin-bottom: 5px;">Media Section Size</label>
-      <div style="display: flex; align-items: center;">
-        <input type="range" id="mediaBlockSize" min="450" max="650" value="650" style="flex-grow: 1; margin-right: 10px;">
-        <span id="mediaBlockSizeValue" style="width: 50px; text-align: right; color: #bbbbbb;">100%</span>
+      <!-- Auto Play Audio Switch -->
+      <div class="form-group switch-container">
+        <span class="switch-label">Auto Play Audio</span>
+        <label class="switch">
+          <input type="checkbox" id="autoPlayAudio" />
+          <span class="slider"></span>
+        </label>
       </div>
-    </div>
-    
-    <button id="deleteData">Clear Data</button>
-    <div class="button-group">
-      <button id="loadConfigButton">Import Config</button>
-      <button id="saveConfigButton">Export Config</button>
-    </div>
-    <input type="file" id="configFileInput" accept="application/json" style="display:none;">
 
-    <!-- GitHub Page Button (Button only, no inline JS) -->
-    <button id="githubButton">Visit GitHub Page for More Info...</button>
-  </div>
-  <script src="dexie.js"></script>
-  <script src="popup.js"></script>
-</body>
+      <!-- Show English Sentence Switch -->
+      <div class="form-group switch-container">
+        <span class="switch-label">Hide Media Translation</span>
+        <label class="switch">
+          <input type="checkbox" id="showEnglishSentence" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- Hide Native Sentence Switch -->
+      <div class="form-group switch-container">
+        <span class="switch-label">Hide JPDB's Sentence Block</span>
+        <label class="switch">
+          <input type="checkbox" id="hideNativeSentence" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div
+        class="form-group"
+        style="display: flex; flex-direction: column; margin-bottom: 15px"
+      >
+        <label
+          for="mediaBlockSize"
+          style="font-size: 14px; color: #cccccc; margin-bottom: 5px"
+          >Media Section Size</label
+        >
+        <div style="display: flex; align-items: center">
+          <input
+            type="range"
+            id="mediaBlockSize"
+            min="450"
+            max="650"
+            value="650"
+            style="flex-grow: 1; margin-right: 10px"
+          />
+          <span
+            id="mediaBlockSizeValue"
+            style="width: 50px; text-align: right; color: #bbbbbb"
+            >100%</span
+          >
+        </div>
+      </div>
+
+      <button id="deleteData">Clear Data</button>
+      <div class="button-group">
+        <button id="loadConfigButton">Import Config</button>
+        <button id="saveConfigButton">Export Config</button>
+      </div>
+      <input
+        type="file"
+        id="configFileInput"
+        accept="application/json"
+        style="display: none"
+      />
+
+      <!-- GitHub Page Button (Button only, no inline JS) -->
+      <button id="githubButton">Visit GitHub Page for More Info...</button>
+    </div>
+    <script src="dexie.js"></script>
+    <script src="popup.js"></script>
+  </body>
 </html>
