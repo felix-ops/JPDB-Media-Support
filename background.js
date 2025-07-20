@@ -7,7 +7,7 @@ const db = new Dexie("JPDBMediaSupportDB");
 db.version(1).stores({
   settings: "key",
   cards: "cardId",
-  vids: "vid"
+  vids: "vid",
 });
 
 // Listen for messages from content and popup scripts.
@@ -23,58 +23,63 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       body: JSON.stringify({
         action: "retrieveMediaFile",
         version: 6,
-        params: { filename: filename }
-      })
+        params: { filename: filename },
+      }),
     })
-      .then(response => response.json())
-      .then(data => {
+      .then((response) => response.json())
+      .then((data) => {
         if (data.result) {
           sendResponse({ success: true, result: data.result });
         } else {
           sendResponse({ success: false, error: data.error });
         }
       })
-      .catch(error => {
+      .catch((error) => {
         sendResponse({ success: false, error: error.message });
       });
     return true; // Indicates async response.
   }
-  
+
   // New Action: getSetting
   else if (message.action === "getSetting") {
-    db.settings.get(message.key)
-      .then(item => {
+    db.settings
+      .get(message.key)
+      .then((item) => {
         sendResponse({ value: item ? item.value : undefined });
       })
-      .catch(error => {
+      .catch((error) => {
         sendResponse({ success: false, error: error.message });
       });
     return true;
   }
-  
+
   // New Action: getVidRecord
   else if (message.action === "getVidRecord") {
-    db.vids.get(message.vid)
-      .then(result => {
+    db.vids
+      .get(message.vid)
+      .then((result) => {
         sendResponse({ success: true, result: result });
       })
-      .catch(error => {
+      .catch((error) => {
         sendResponse({ success: false, error: error.message });
       });
     return true;
   }
-  
+
   // New Action: getCardsMapping
   else if (message.action === "getCardsMapping") {
-    db.cards.where("cardId").anyOf(message.cardIds).toArray()
-      .then(cardsArray => {
+    db.cards
+      .where("cardId")
+      .anyOf(message.cardIds)
+      .toArray()
+      .then((cardsArray) => {
         const mapping = {};
-        cardsArray.forEach(card => {
+        cardsArray.forEach((card) => {
           mapping[card.cardId] = card;
         });
         sendResponse({ success: true, result: mapping });
       })
-      .catch(error => {
+      .catch((error) => {
         sendResponse({ success: false, error: error.message });
       });
     return true;
