@@ -1,22 +1,21 @@
 // If you're not using a bundler, ensure Dexie is loaded.
-// For example, in Manifest V3, you can import Dexie using importScripts.
 importScripts("dexie.js");
 
-// Initialize Dexie DB
+// Initialize Dexie DB with the NEW, EFFICIENT SCHEMA
 const db = new Dexie("JPDBMediaSupportDB");
 db.version(1).stores({
-  settings: "key",
-  cards: "cardId",
+  cards: "cardId, deckName", // Lightweight metadata table
+  media: "cardId", // Heavy media blobs table
   vids: "vid",
+  settings: "key",
 });
 
 // Listen for messages from content and popup scripts.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Action: fetchMediaFile (existing functionality)
+  // Action: fetchMediaFile (no change)
   if (message.action === "fetchMediaFile") {
     const ankiUrl = message.ankiUrl || "http://localhost:8765";
     const filename = message.filename;
-    // Fetch from Anki Connect (background pages are exempt from CORS restrictions)
     fetch(ankiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -37,10 +36,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((error) => {
         sendResponse({ success: false, error: error.message });
       });
-    return true; // Indicates async response.
+    return true;
   }
 
-  // New Action: getSetting
+  // Action: getSetting (no change)
   else if (message.action === "getSetting") {
     db.settings
       .get(message.key)
@@ -53,7 +52,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // New Action: getVidRecord
+  // Action: getVidRecord (no change)
   else if (message.action === "getVidRecord") {
     db.vids
       .get(message.vid)
@@ -66,16 +65,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // New Action: getCardsMapping
+  // *** UPDATED: getCardsMapping now reads from TWO tables and joins them ***
   else if (message.action === "getCardsMapping") {
-    db.cards
-      .where("cardId")
-      .anyOf(message.cardIds)
-      .toArray()
-      .then((cardsArray) => {
+    // Fetch from both tables in parallel for maximum speed
+    Promise.all([
+      db.cards.bulkGet(message.cardIds),
+      db.media.bulkGet(message.cardIds),
+    ])
+      .then(([cardsArray, mediaArray]) => {
         const mapping = {};
-        cardsArray.forEach((card) => {
-          mapping[card.cardId] = card;
+        cardsArray.forEach((card, index) => {
+          if (card) {
+            // Re-attach the mediaData object so content.js doesn't need to change.
+            const mediaObject = mediaArray[index];
+            if (mediaObject) {
+              card.mediaData = mediaObject.mediaData;
+            }
+            mapping[card.cardId] = card;
+          }
         });
         sendResponse({ success: true, result: mapping });
       })

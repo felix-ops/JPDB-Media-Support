@@ -1,10 +1,12 @@
 /* popup.js using Dexie.js for IndexedDB */
 
 const db = new Dexie("JPDBMediaSupportDB");
+// Use the NEW, EFFICIENT SCHEMA. This must match background.js
 db.version(1).stores({
-  settings: "key",
-  cards: "cardId",
+  cards: "cardId, deckName", // Lightweight metadata table
+  media: "cardId", // Heavy media blobs table
   vids: "vid",
+  settings: "key",
 });
 
 // --- Helper functions for settings ---
@@ -335,8 +337,46 @@ async function getVidsFromContext(contextTexts) {
   return { vidsForCards: [] };
 }
 
+async function retrieveMediaFilesInBatch(filenames) {
+  if (!filenames || filenames.length === 0) {
+    return {};
+  }
+  const ankiUrl = document.getElementById("url").value.trim();
+  const actions = filenames.map((filename) => ({
+    action: "retrieveMediaFile",
+    params: { filename: filename },
+  }));
+
+  try {
+    const response = await fetch(ankiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "multi",
+        version: 6,
+        params: { actions: actions },
+      }),
+    });
+    const data = await response.json();
+    if (data.error) {
+      console.error("AnkiConnect multi error:", data.error);
+      return {};
+    }
+
+    const mediaDataMap = {};
+    // The result is an array of base64 strings, matching the order of filenames sent.
+    data.result.forEach((result, index) => {
+      mediaDataMap[filenames[index]] = result;
+    });
+    return mediaDataMap;
+  } catch (error) {
+    console.error("Failed to batch fetch media files:", error);
+    return {};
+  }
+}
+
 async function fetchAndStoreData() {
-  // Retrieve field selections for Japanese, English, image, and audio.
+  // --- 1. INITIAL SETUP & VALIDATION ---
   const japaneseField = document.getElementById("japaneseFieldSelect").value;
   const englishField = document.getElementById("englishFieldSelect").value;
   const imageField = document.getElementById("imageFieldSelect").value;
@@ -345,17 +385,15 @@ async function fetchAndStoreData() {
   const progressBar = document.getElementById("progressBar");
   const deckName = document.getElementById("deckSelect").value;
 
-  // Save field settings
   saveSetting("selectedJapaneseField", japaneseField);
   saveSetting("selectedEnglishField", englishField);
   saveSetting("selectedImageField", imageField);
   saveSetting("selectedAudioField", audioField);
 
   if (!japaneseField) {
-    alert("Please select fields for Japanese Sentence");
+    alert("Please select a field for the Japanese sentence.");
     return;
   }
-
   const token = document.getElementById("jpdbApiKey").value.trim();
   if (!token) {
     alert("Please enter a valid JPDB API key.");
@@ -364,99 +402,189 @@ async function fetchAndStoreData() {
 
   progressBar.style.display = "block";
   progressBar.value = 0;
-  const totalCards = window.fetchedCards.length;
+  resultDiv.style.display = "block";
+  resultDiv.innerText = "Scanning for required updates...";
 
-  // Build an array of cleaned Japanese texts from each card.
-  const japaneseTexts = window.fetchedCards.map((card) => {
-    const rawJapaneseText = card.fields[japaneseField].value.trim();
-    return stripJapaneseHtml(rawJapaneseText);
+  // ====================================================================
+  // UNIFIED SCANNING PHASE
+  // ====================================================================
+
+  const ankiCards = window.fetchedCards;
+  // This is the key optimization: read from separate tables in parallel.
+  const [allDbCards, mediaKeys] = await Promise.all([
+    db.cards.toArray(), // VERY FAST: Reads only lightweight metadata.
+    db.media.toCollection().keys(), // VERY FAST: Reads only the primary keys.
+  ]);
+
+  const allDbCardsMap = new Map(allDbCards.map((c) => [c.cardId, c]));
+  const mediaIdSet = new Set(mediaKeys); // A fast set for checking existence.
+  const ankiCardIds = new Set(ankiCards.map((c) => c.cardId));
+
+  const deckCardsToProcess = [];
+  const globalCardsToFix = [];
+
+  // --- Check current deck for text/file changes or missing media data ---
+  for (const ankiCard of ankiCards) {
+    const storedCard = allDbCardsMap.get(ankiCard.cardId);
+    const newJapaneseText = stripJapaneseHtml(
+      ankiCard.fields[japaneseField].value.trim()
+    );
+    const newEnglishText = englishField
+      ? stripEnglishHtml(ankiCard.fields[englishField].value.trim())
+      : "";
+    const newImageFile = imageField
+      ? extractImageFilenameUsingDOMParser(
+          ankiCard.fields[imageField].value.trim()
+        )
+      : "";
+    const newAudioFile = audioField
+      ? extractAudioFilename(ankiCard.fields[audioField].value.trim())
+      : "";
+    const needsMediaData =
+      (newImageFile || newAudioFile) && !mediaIdSet.has(ankiCard.cardId);
+
+    if (
+      !storedCard ||
+      storedCard.japaneseContext !== newJapaneseText ||
+      storedCard.englishContext !== newEnglishText ||
+      storedCard.image !== newImageFile ||
+      storedCard.audio !== newAudioFile ||
+      needsMediaData
+    ) {
+      deckCardsToProcess.push({
+        ankiCard,
+        newJapaneseText,
+        newEnglishText,
+        newImageFile,
+        newAudioFile,
+      });
+    }
+  }
+
+  // --- Check the rest of the DB *only* for missing media data ---
+  for (const storedCard of allDbCards) {
+    if (ankiCardIds.has(storedCard.cardId)) continue;
+    const needsMedia =
+      (storedCard.image || storedCard.audio) &&
+      !mediaIdSet.has(storedCard.cardId);
+    if (needsMedia) {
+      globalCardsToFix.push(storedCard);
+    }
+  }
+
+  if (deckCardsToProcess.length === 0 && globalCardsToFix.length === 0) {
+    progressBar.style.display = "none";
+    resultDiv.innerText = "Everything is already up-to-date!";
+    return;
+  }
+
+  // ====================================================================
+  // CONSOLIDATED PROCESSING PHASE
+  // ====================================================================
+  resultDiv.innerText = `Found ${
+    deckCardsToProcess.length + globalCardsToFix.length
+  } to update... `;
+
+  const textsToParse = deckCardsToProcess.map((c) => c.newJapaneseText);
+  const filenamesToFetch = new Set();
+  deckCardsToProcess.forEach((c) => {
+    if (c.newImageFile) filenamesToFetch.add(c.newImageFile);
+    if (c.newAudioFile) filenamesToFetch.add(c.newAudioFile);
+  });
+  globalCardsToFix.forEach((c) => {
+    if (c.image) filenamesToFetch.add(c.image);
+    if (c.audio) filenamesToFetch.add(c.audio);
   });
 
-  // Chunk the texts into groups of 100.
-  const textChunks = chunkArray(japaneseTexts, 100);
-  let allVidsForCards = [];
-
-  // Process each chunk sequentially.
-  for (const chunk of textChunks) {
-    const jpdbData = await getVidsFromContext(chunk);
-    if (jpdbData && jpdbData.vidsForCards) {
-      allVidsForCards.push(...jpdbData.vidsForCards);
+  let vidsForDeckCards = [];
+  if (textsToParse.length > 0) {
+    const textChunks = chunkArray(textsToParse, 100);
+    for (let i = 0; i < textChunks.length; i++) {
+      const jpdbData = await getVidsFromContext(textChunks[i]);
+      vidsForDeckCards.push(...(jpdbData?.vidsForCards || []));
+      progressBar.value = 0 + Math.round(((i + 1) / textChunks.length) * 40);
     }
+  } else {
+    progressBar.value = 40;
   }
 
-  // Make sure we have the same number of results as cards.
-  if (allVidsForCards.length !== totalCards) {
-    console.warn("The number of results does not match the number of cards.");
-  }
-
-  for (let i = 0; i < totalCards; i++) {
-    const card = window.fetchedCards[i];
-    const cardId = card.cardId;
-
-    // Retrieve raw HTML from the selected fields.
-    const rawJapaneseText = japaneseField
-      ? card.fields[japaneseField].value.trim()
-      : "";
-    const rawEnglishText = englishField
-      ? card.fields[englishField].value.trim()
-      : "";
-    const rawImageText = imageField ? card.fields[imageField].value.trim() : "";
-    const rawAudioText = audioField ? card.fields[audioField].value.trim() : "";
-
-    // Process texts using the provided functions.
-    const japaneseText = stripJapaneseHtml(rawJapaneseText);
-    const englishText = stripEnglishHtml(rawEnglishText);
-
-    const imageFilename = extractImageFilenameUsingDOMParser(rawImageText);
-    const audioFilename = extractAudioFilename(rawAudioText);
-
-    // Check for an existing record; compare using the new field names.
-    let newCardData = await db.cards.get(cardId);
-    if (
-      newCardData &&
-      newCardData.japaneseContext === japaneseText &&
-      newCardData.englishContext === englishText &&
-      newCardData.image === imageFilename &&
-      newCardData.audio === audioFilename &&
-      newCardData.deckName === deckName
-    ) {
-      // Existing record is up-to-date; no need to update.
-    } else {
-      // Use the pre-fetched vids for this card (or an empty array if none)
-      const cardVids = allVidsForCards[i] || [];
-      newCardData = {
-        cardId,
-        deckName: deckName,
-        japaneseContext: japaneseText,
-        englishContext: englishText,
-        image: imageFilename,
-        audio: audioFilename,
-        vids: cardVids,
+  let allFetchedMedia = {};
+  if (filenamesToFetch.size > 0) {
+    const filenameChunks = chunkArray(Array.from(filenamesToFetch), 500);
+    for (let i = 0; i < filenameChunks.length; i++) {
+      allFetchedMedia = {
+        ...allFetchedMedia,
+        ...(await retrieveMediaFilesInBatch(filenameChunks[i])),
       };
-      await db.cards.put(newCardData);
+      progressBar.value =
+        40 + Math.round(((i + 1) / filenameChunks.length) * 60);
     }
-
-    // Update reverse mapping for vocabulary IDs.
-    for (const vid of newCardData.vids) {
-      let existingVid = await db.vids.get(vid);
-      if (existingVid) {
-        if (!existingVid.cards.includes(cardId)) {
-          existingVid.cards.push(cardId);
-          await db.vids.put(existingVid);
-        }
-      } else {
-        await db.vids.put({ vid: vid, cards: [cardId] });
-      }
-    }
-
-    progressBar.value = Math.round(((i + 1) / totalCards) * 100);
-    updateCardCount();
   }
+
+  const cardsToStore = [];
+  const mediaToStore = [];
+  const vidsToUpdate = {};
+
+  for (let i = 0; i < deckCardsToProcess.length; i++) {
+    const c = deckCardsToProcess[i];
+    cardsToStore.push({
+      cardId: c.ankiCard.cardId,
+      deckName,
+      japaneseContext: c.newJapaneseText,
+      englishContext: c.newEnglishText,
+      image: c.newImageFile,
+      audio: c.newAudioFile,
+      vids: vidsForDeckCards[i] || [],
+    });
+    if (c.newImageFile || c.newAudioFile) {
+      mediaToStore.push({
+        cardId: c.ankiCard.cardId,
+        mediaData: {
+          image: allFetchedMedia[c.newImageFile] || null,
+          audio: allFetchedMedia[c.newAudioFile] || null,
+        },
+      });
+    }
+    for (const vid of vidsForDeckCards[i] || []) {
+      if (!vidsToUpdate[vid]) vidsToUpdate[vid] = new Set();
+      vidsToUpdate[vid].add(c.ankiCard.cardId);
+    }
+  }
+
+  for (const card of globalCardsToFix) {
+    mediaToStore.push({
+      cardId: card.cardId,
+      mediaData: {
+        image: allFetchedMedia[card.image] || null,
+        audio: allFetchedMedia[card.audio] || null,
+      },
+    });
+  }
+
+  const existingVids = await db.vids
+    .where("vid")
+    .anyOf(Object.keys(vidsToUpdate))
+    .toArray();
+  existingVids.forEach((dbVid) => {
+    if (vidsToUpdate[dbVid.vid])
+      dbVid.cards.forEach((cardId) => vidsToUpdate[dbVid.vid].add(cardId));
+  });
+  const finalVidsArray = Object.entries(vidsToUpdate).map(
+    ([vid, cardIdSet]) => ({ vid, cards: Array.from(cardIdSet) })
+  );
+
+  await db.transaction("rw", db.cards, db.media, db.vids, async () => {
+    if (cardsToStore.length > 0) await db.cards.bulkPut(cardsToStore);
+    if (mediaToStore.length > 0) await db.media.bulkPut(mediaToStore);
+    if (finalVidsArray.length > 0) await db.vids.bulkPut(finalVidsArray);
+  });
 
   progressBar.style.display = "none";
-  resultDiv.innerText = `Data fetched and stored successfully!`;
+  let finalMessage = `Sync complete: ${
+    deckCardsToProcess.length + globalCardsToFix.length
+  } were added.`;
+  resultDiv.innerText = finalMessage;
   updateCardCount();
-  resultDiv.style.display = "block";
 }
 
 // ------------------------------
@@ -477,60 +605,10 @@ document.getElementById("jpdbApiKey").addEventListener("change", (e) => {
   saveSetting("jpdbApiKey", e.target.value.trim());
 });
 
-document
-  .getElementById("saveConfigButton")
-  .addEventListener("click", async () => {
-    const settings = await db.settings.toArray();
-    const cards = await db.cards.toArray();
-    const vids = await db.vids.toArray();
-    const configData = { settings, cards, vids };
-    const json = JSON.stringify(configData, null, 2);
-
-    // Get the total card count from the database
-    const totalCardCount = await db.cards.count();
-
-    // Create the filename with the total card count
-    const filename = `JPDB_Media_Config_${totalCardCount}.json`;
-
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename; // Use the dynamic filename here
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  });
-
 document.getElementById("loadConfigButton").addEventListener("click", () => {
   document.getElementById("configFileInput").click();
 });
-document
-  .getElementById("configFileInput")
-  .addEventListener("change", async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async function (e) {
-      try {
-        const configData = JSON.parse(e.target.result);
-        await Promise.all([
-          db.settings.clear(),
-          db.cards.clear(),
-          db.vids.clear(),
-        ]);
-        if (configData.settings) await db.settings.bulkPut(configData.settings);
-        if (configData.cards) await db.cards.bulkPut(configData.cards);
-        if (configData.vids) await db.vids.bulkPut(configData.vids);
-        alert("Configuration loaded successfully!");
-        updateCardCount();
-      } catch (err) {
-        alert("Error parsing configuration file: " + err.message);
-      }
-    };
-    reader.readAsText(file);
-  });
+
 document.getElementById("autoPlayAudio").addEventListener("change", (e) => {
   saveSetting("autoPlayAudio", e.target.checked);
 });
@@ -574,6 +652,60 @@ document
   });
 
 document
+  .getElementById("saveConfigButton")
+  .addEventListener("click", async () => {
+    const settings = await db.settings.toArray();
+    const cards = await db.cards.toArray(); // Only save lightweight metadata
+    const vids = await db.vids.toArray();
+    // Do NOT save the heavy 'media' table to the config file
+    const configData = { settings, cards, vids };
+    const json = JSON.stringify(configData, null, 2);
+    const totalCardCount = await db.cards.count();
+    const filename = `JPDB_Media_Config_${totalCardCount}.json`;
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+// Replace the configFileInput listener
+document
+  .getElementById("configFileInput")
+  .addEventListener("change", async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async function (e) {
+      try {
+        const configData = JSON.parse(e.target.result);
+        // Clear all tables, including the new media table
+        await Promise.all([
+          db.settings.clear(),
+          db.cards.clear(),
+          db.media.clear(),
+          db.vids.clear(),
+        ]);
+        if (configData.settings) await db.settings.bulkPut(configData.settings);
+        if (configData.cards) await db.cards.bulkPut(configData.cards); // Load metadata
+        if (configData.vids) await db.vids.bulkPut(configData.vids);
+        alert(
+          `Configuration loaded! Click "Fetch Data From Anki" to sync media files.`
+        );
+        updateCardCount();
+      } catch (err) {
+        alert("Error parsing configuration file: " + err.message);
+      }
+    };
+    reader.readAsText(file);
+  });
+
+// Replace the deleteData listener
+document
   .getElementById("deleteData")
   .addEventListener("click", async function () {
     if (
@@ -583,6 +715,7 @@ document
     ) {
       try {
         await db.cards.clear();
+        await db.media.clear();
         await db.vids.clear();
         updateCardCount();
       } catch (error) {

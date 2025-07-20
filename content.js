@@ -101,6 +101,7 @@ function waitForElement(selector, timeout = 5000) {
 }
 
 function getMimeType(filename) {
+  if (!filename) return "application/octet-stream";
   if (filename.match(/\.(jpg|jpeg)$/i)) return "image/jpeg";
   if (filename.match(/\.png$/i)) return "image/png";
   if (filename.match(/\.gif$/i)) return "image/gif";
@@ -183,21 +184,15 @@ function createMediaBlock() {
   mediaBlock.style.flexDirection = "column";
   mediaBlock.style.alignItems = "center";
 
-  // Set the base width for which the design was made.
   const baseWidth = 650;
   mediaBlock.style.width = baseWidth + "px";
-
-  // Set the transform origin so that scaling occurs from the top left.
   mediaBlock.style.transformOrigin = "top right";
 
-  // Apply the slider setting to scale the entire media block.
-  // The scale factor is computed as the saved slider value divided by the base width.
   getSetting("mediaBlockSize", "650").then((size) => {
     const scaleFactor = size / baseWidth;
     mediaBlock.style.transform = `scale(${scaleFactor})`;
   });
 
-  // --- Create Image Container and Its Contents ---
   const imageContainer = document.createElement("div");
   imageContainer.style.position = "relative";
   imageContainer.style.display = "flex";
@@ -234,11 +229,11 @@ function createMediaBlock() {
   };
 
   const leftButton = document.createElement("button");
-  leftButton.innerHTML = "&#9664;";
+  leftButton.innerHTML = "◀";
   Object.assign(leftButton.style, btnStyle, { left: "10px" });
 
   const rightButton = document.createElement("button");
-  rightButton.innerHTML = "&#9654;";
+  rightButton.innerHTML = "▶";
   Object.assign(rightButton.style, btnStyle, { right: "10px" });
 
   const cardCountElem = document.createElement("div");
@@ -261,13 +256,19 @@ function createMediaBlock() {
   imageContainer.appendChild(imgElem);
   imageContainer.appendChild(rightButton);
 
-  // --- Create Context (Text) Container ---
   const contextElem = document.createElement("div");
   contextElem.style.display = "flex";
   contextElem.style.flexDirection = "column";
   contextElem.style.marginTop = "10px";
 
-  // Append sub-containers to media block.
+  // --- Create a single, persistent Audio Element ---
+  const audioElem = document.createElement("audio");
+  audioElem.id = "jpdb-audio";
+  audioElem.style.display = "none";
+
+  // Append it to the top-level mediaBlock so it's never destroyed
+  mediaBlock.appendChild(audioElem);
+
   mediaBlock.appendChild(imageContainer);
   mediaBlock.appendChild(contextElem);
 
@@ -279,49 +280,16 @@ function createMediaBlock() {
     rightButton,
     cardCountElem,
     contextElem,
+    audioElem, // Return the persistent audio element
   };
 }
 
 // ------------------------------
-// Setup Media Block (Preloading, Navigation, etc.)
+// Setup Media Block (Navigation, etc.)
 // ------------------------------
 function setupMediaBlock(vid, jpdbData, cardIds, elements) {
-  const preloadedImages = {};
-  const preloadedAudios = {};
-
-  async function preloadImages() {
-    for (const cardId of cardIds) {
-      const cardData = jpdbData.cards[cardId];
-      if (cardData && cardData.image) {
-        try {
-          const imageData = await fetchMediaFile(cardData.image);
-          if (imageData) {
-            const mimeImg = getMimeType(cardData.image);
-            const blob = base64ToBlob(imageData, mimeImg);
-            const objectUrl = URL.createObjectURL(blob);
-            preloadedImages[cardId] = objectUrl;
-          }
-        } catch (error) {}
-      }
-    }
-  }
-  preloadImages();
-
-  async function preloadAudios() {
-    for (const cardId of cardIds) {
-      const cardData = jpdbData.cards[cardId];
-      if (cardData && cardData.audio) {
-        try {
-          const audioData = await fetchMediaFile(cardData.audio);
-          if (audioData) {
-            preloadedAudios[cardId] = audioData;
-          }
-        } catch (error) {}
-      }
-    }
-  }
-  preloadAudios();
-
+  // Obsolete preloading functions have been removed. Media is now loaded
+  // directly inside loadCard() for instant performance.
   removeExistingContent();
 
   if (cardIds.length < 2) {
@@ -374,16 +342,16 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
   }
 
   async function loadCard(index) {
-    // Update card counter display
     elements.cardCountElem.innerText = `${index + 1}/${cardIds.length}`;
     elements.cardCountElem.style.display = "block";
 
-    // Pause any existing audio
-    let existingAudio = document.getElementById("jpdb-audio");
-    if (existingAudio) {
-      existingAudio.pause();
-      existingAudio.currentTime = 0;
-    }
+    // The audio element is now persistent. Get a direct reference.
+    const audioElem = elements.audioElem;
+
+    // Pause and reset the single audio element before loading new content.
+    audioElem.pause();
+    audioElem.currentTime = 0;
+    audioElem.src = ""; // Important: Clear the old source
 
     const cardId = cardIds[index];
     if (!jpdbData.cards || !jpdbData.cards[cardId]) {
@@ -391,15 +359,9 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     }
     const cardData = jpdbData.cards[cardId];
 
-    // Retrieve the raw HTML content from the two separate fields
-    const rawJapaneseHtml = cardData.japaneseContext || "";
-    const rawEnglishHtml = cardData.englishContext || "";
+    const japaneseText = cardData.japaneseContext || "";
+    const englishText = cardData.englishContext || "";
 
-    // Process the HTML to get plain text using your custom functions
-    const japaneseText = stripJapaneseHtml(rawJapaneseHtml);
-    const englishText = stripEnglishHtml(rawEnglishHtml);
-
-    // Create container for Japanese sentence (and audio button if applicable)
     const jpContainer = document.createElement("div");
     jpContainer.style.display = "flex";
     jpContainer.style.alignItems = "center";
@@ -407,117 +369,96 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     jpContainer.classList.add("card-sentence", "jpdb-inserted");
     jpContainer.style.justifyContent = "center";
 
-    // Handle audio if available
+    // --- AUDIO HANDLING (Simplified) ---
+    // Remove the audio button if it exists from a previous card
+    const oldAudioBtn = document.getElementById("jpdb-media-audio-btn");
+    if (oldAudioBtn) oldAudioBtn.remove();
+
     if (cardData.audio) {
       const audioBtn = document.createElement("a");
-      audioBtn.id = "jpdb-media-audio";
+      audioBtn.id = "jpdb-media-audio-btn"; // Give button a unique ID
       audioBtn.className = "icon-link example-audio";
       audioBtn.href = "#";
       audioBtn.innerHTML =
         '<i class="ti ti-volume" style="color: #4b8dff;"></i>';
       audioBtn.addEventListener("click", (e) => {
         e.preventDefault();
-        const audioElem = document.getElementById("jpdb-audio");
-        if (audioElem) {
-          pauseOtherAudios(audioElem);
-          audioElem.currentTime = 0;
-          audioElem.play();
-        }
+        // The audio element is persistent, so this always works
+        pauseOtherAudios(audioElem);
+        audioElem.currentTime = 0;
+        audioElem.play();
       });
-      const spacer = document.createElement("div");
-      spacer.style.width = "0.5rem";
-      spacer.style.display = "inline-block";
       jpContainer.appendChild(audioBtn);
-      jpContainer.appendChild(spacer);
 
-      let audioElem = document.getElementById("jpdb-audio");
-      if (!audioElem) {
-        audioElem = document.createElement("audio");
-        audioElem.id = "jpdb-audio";
-        audioElem.style.display = "none";
-        jpContainer.appendChild(audioElem);
+      // No need to create the audio element; we just use it.
+      const playAudio = () => {
+        getSetting("autoPlayAudio", false).then((autoPlay) => {
+          if (autoPlay && audioElem.paused) {
+            pauseOtherAudios(audioElem);
+            audioElem.play().catch((error) => {});
+          }
+        });
+      };
+
+      if (cardData.mediaData && cardData.mediaData.audio) {
+        const mimeAudio = getMimeType(cardData.audio);
+        const blob = base64ToBlob(cardData.mediaData.audio, mimeAudio);
+        audioElem.src = URL.createObjectURL(blob);
+        playAudio();
       } else {
-        jpContainer.appendChild(audioElem);
-      }
-
-      fetchMediaFile(cardData.audio)
-        .then((audioData) => {
+        fetchMediaFile(cardData.audio).then((audioData) => {
           if (audioData) {
             const mimeAudio = getMimeType(cardData.audio);
             audioElem.src = `data:${mimeAudio};base64,${audioData}`;
-            getSetting("autoPlayAudio", false).then((autoPlay) => {
-              if (autoPlay && audioElem.paused) {
-                pauseOtherAudios(audioElem);
-                audioElem.play().catch((error) => {
-                  if (error.name === "NotAllowedError") {
-                    const playAfterInteraction = function () {
-                      audioElem.play();
-                      document.removeEventListener(
-                        "click",
-                        playAfterInteraction
-                      );
-                    };
-                    document.addEventListener("click", playAfterInteraction);
-                  } else {
-                  }
-                });
-              }
-            });
+            playAudio();
           }
-        })
-        .catch((error) => {});
+        });
+      }
     }
 
-    // Create element for the Japanese sentence
     const jpSentence = document.createElement("div");
     jpSentence.className = "sentence";
     jpSentence.style.marginLeft = "0.3rem";
     jpSentence.style.fontSize = "22px";
     jpSentence.style.textAlign = "center";
-    jpSentence.innerText = japaneseText; // Initially plain text
+    jpSentence.innerText = japaneseText;
     jpContainer.appendChild(jpSentence);
+
+    // Clear the old text content and append the new
     elements.contextElem.innerHTML = "";
     elements.contextElem.appendChild(jpContainer);
 
-    // Use JPDB tokenization on the processed Japanese text for highlighting
+    // --- Tokenizer and other logic remains the same ---
     if (japaneseText) {
-      getTokensForContext(japaneseText)
-        .then((tokenData) => {
-          const tokens = tokenData.tokens;
-          const vocabulary = tokenData.vocabulary;
-          let newContextHtml = "";
-          let lastIndex = 0;
-
-          tokens.sort((a, b) => a[1] - b[1]);
-
-          tokens.forEach((token) => {
-            const tokenStart = token[1];
-            const tokenLength = token[2];
-            const tokenEnd = tokenStart + tokenLength;
-
-            newContextHtml += japaneseText.substring(lastIndex, tokenStart);
-            const tokenText = japaneseText.substring(tokenStart, tokenEnd);
-
-            if (token[3] !== null) {
-              const vocabEntry = vocabulary[token[0]];
-              if (vocabEntry && String(vocabEntry[0]) === String(vid)) {
-                newContextHtml += `<span style="color: #4b8dff; font-weight: bold;">${tokenText}</span>`;
-              } else {
-                newContextHtml += tokenText;
-              }
+      getTokensForContext(japaneseText).then((tokenData) => {
+        const tokens = tokenData.tokens;
+        const vocabulary = tokenData.vocabulary;
+        let newContextHtml = "";
+        let lastIndex = 0;
+        tokens.sort((a, b) => a[1] - b[1]);
+        tokens.forEach((token) => {
+          const tokenStart = token[1];
+          const tokenLength = token[2];
+          const tokenEnd = tokenStart + tokenLength;
+          newContextHtml += japaneseText.substring(lastIndex, tokenStart);
+          const tokenText = japaneseText.substring(tokenStart, tokenEnd);
+          if (token[3] !== null) {
+            const vocabEntry = vocabulary[token[0]];
+            if (vocabEntry && String(vocabEntry[0]) === String(vid)) {
+              newContextHtml += `<span style="color: #4b8dff; font-weight: bold;">${tokenText}</span>`;
             } else {
               newContextHtml += tokenText;
             }
-            lastIndex = tokenEnd;
-          });
-
-          newContextHtml += japaneseText.substring(lastIndex);
-          jpSentence.innerHTML = newContextHtml;
-        })
-        .catch((error) => {});
+          } else {
+            newContextHtml += tokenText;
+          }
+          lastIndex = tokenEnd;
+        });
+        newContextHtml += japaneseText.substring(lastIndex);
+        jpSentence.innerHTML = newContextHtml;
+      });
     }
 
-    // Create and append English translation container below the Japanese sentence
     getSetting("showEnglishSentence", true).then((showEnglish) => {
       if (showEnglish && englishText) {
         const translationContainer = document.createElement("div");
@@ -533,41 +474,31 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
       }
     });
 
-    // Handle image display with fixed size
     if (cardData.image) {
-      // Set fixed size for the image element
-      // elements.imgElem.style.width = "450px"; // Set desired width
-      elements.imgElem.style.height = "275px"; // Set desired height
-      elements.imgElem.style.objectFit = "contain"; // Maintain aspect ratio
-      elements.imgElem.style.maxWidth = "100%"; // Ensure it fits container
-      elements.imgElem.style.maxHeight = "100%"; // Ensure it fits container
+      elements.imgElem.style.height = "275px";
+      elements.imgElem.style.objectFit = "contain";
+      elements.imgElem.style.maxWidth = "100%";
+      elements.imgElem.style.maxHeight = "100%";
 
-      if (preloadedImages[cardId]) {
-        elements.imgElem.src = preloadedImages[cardId];
+      if (cardData.mediaData && cardData.mediaData.image) {
+        const mimeImg = getMimeType(cardData.image);
+        const blob = base64ToBlob(cardData.mediaData.image, mimeImg);
+        elements.imgElem.src = URL.createObjectURL(blob);
         elements.imgElem.style.opacity = 1;
         elements.imgElem.style.display = "";
       } else {
-        fetchMediaFile(cardData.image)
-          .then((imageData) => {
-            if (imageData) {
-              const mimeImg = getMimeType(cardData.image);
-              const blob = base64ToBlob(imageData, mimeImg);
-              const objectUrl = URL.createObjectURL(blob);
-              elements.imgElem.onload = function () {
-                elements.imgElem.style.display = "";
-                URL.revokeObjectURL(objectUrl);
-              };
-              elements.imgElem.onerror = function () {
-                elements.imgElem.style.display = "none";
-              };
-              elements.imgElem.src = objectUrl;
-              elements.imgElem.style.opacity = 1;
-            } else {
-              elements.imgElem.src = "";
-              elements.imgElem.style.display = "none";
-            }
-          })
-          .catch((error) => {});
+        fetchMediaFile(cardData.image).then((imageData) => {
+          if (imageData) {
+            const mimeImg = getMimeType(cardData.image);
+            const blob = base64ToBlob(imageData, mimeImg);
+            elements.imgElem.src = URL.createObjectURL(blob);
+            elements.imgElem.style.opacity = 1;
+            elements.imgElem.style.display = "";
+          } else {
+            elements.imgElem.src = "";
+            elements.imgElem.style.display = "none";
+          }
+        });
       }
     } else {
       elements.imgElem.src = "";
@@ -588,21 +519,20 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "ArrowLeft") {
-      elements.leftButton.click(); // Simulate click on left button
+      elements.leftButton.click();
     } else if (event.key === "ArrowRight") {
-      elements.rightButton.click(); // Simulate click on right button
+      elements.rightButton.click();
     }
   });
 }
+
 function extractVidFromPlainHtml() {
-  // Look for an anchor with the "plain" class that has an href starting with "/vocabulary/"
   const plainLink = document.querySelector('a.plain[href^="/vocabulary/"]');
   if (plainLink) {
-    const href = plainLink.getAttribute("href"); // e.g. "/vocabulary/1484150/秘密#a"
+    const href = plainLink.getAttribute("href");
     const match = href.match(/\/vocabulary\/(\d+)\//);
     if (match) {
-      const vid = match[1];
-      return vid;
+      return match[1];
     }
   }
   return null;
@@ -623,18 +553,15 @@ function stripEnglishHtml(html) {
 async function insertMediaInReview() {
   let vid = extractVidFromReviewUrl();
   if (!vid) {
-    // Fallback to HTML extraction if URL doesn't include vid
     vid = extractVidFromPlainHtml();
   }
-  if (!vid) return; // If still not found, do nothing
+  if (!vid) return;
 
   const vidRecord = await getVidRecord(vid);
-  if (!vidRecord) return;
-  const cardIds = vidRecord.cards;
-  if (!cardIds || cardIds.length === 0) return;
+  if (!vidRecord || !vidRecord.cards || vidRecord.cards.length === 0) return;
 
+  const cardIds = vidRecord.cards;
   const elements = createMediaBlock();
-  // Adjust insertion point as needed. Here we try to insert next to the vocabulary section.
   const mainContent = document.querySelector(".result.vocabulary .vbox.gap");
   document.body.style.maxWidth = "75rem";
   if (mainContent) {
@@ -655,18 +582,14 @@ async function insertMediaInReview() {
 
   const cardsMapping = await getCardsMapping(cardIds);
 
-  // Prioritize cards from the "JPDB Media" deck.
   cardIds.sort((a, b) => {
     const cardA = cardsMapping[a];
     const cardB = cardsMapping[b];
-
     const isAPriority = cardA && cardA.deckName === "JPDB Media";
     const isBPriority = cardB && cardB.deckName === "JPDB Media";
-
-    if (isAPriority && !isBPriority) return -1; // a comes first
-    if (!isAPriority && isBPriority) return 1; // b comes first
-
-    return 0; // maintain original relative order
+    if (isAPriority && !isBPriority) return -1;
+    if (!isAPriority && isBPriority) return 1;
+    return 0;
   });
 
   setupMediaBlock(vid, { cards: cardsMapping }, cardIds, elements);
@@ -675,11 +598,11 @@ async function insertMediaInReview() {
 async function insertMediaInVocabularyPage() {
   const vid = extractVidFromVocabularyUrl();
   if (!vid) return;
-  const vidRecord = await getVidRecord(vid);
-  if (!vidRecord) return;
-  const cardIds = vidRecord.cards;
-  if (!cardIds || cardIds.length === 0) return;
 
+  const vidRecord = await getVidRecord(vid);
+  if (!vidRecord || !vidRecord.cards || vidRecord.cards.length === 0) return;
+
+  const cardIds = vidRecord.cards;
   const elements = createMediaBlock();
   const meaningsElem = document.querySelector(".subsection-meanings");
   if (meaningsElem && meaningsElem.parentElement) {
@@ -687,20 +610,17 @@ async function insertMediaInVocabularyPage() {
   } else {
     document.body.appendChild(elements.mediaBlock);
   }
+
   const cardsMapping = await getCardsMapping(cardIds);
 
-  // Prioritize cards from the "JPDB Media" deck.
   cardIds.sort((a, b) => {
     const cardA = cardsMapping[a];
     const cardB = cardsMapping[b];
-
     const isAPriority = cardA && cardA.deckName === "JPDB Media";
     const isBPriority = cardB && cardB.deckName === "JPDB Media";
-
-    if (isAPriority && !isBPriority) return -1; // a comes first
-    if (!isAPriority && isBPriority) return 1; // b comes first
-
-    return 0; // maintain original relative order
+    if (isAPriority && !isBPriority) return -1;
+    if (!isAPriority && isBPriority) return 1;
+    return 0;
   });
 
   setupMediaBlock(vid, { cards: cardsMapping }, cardIds, elements);
@@ -720,6 +640,9 @@ function init() {
 function initIfEnabled() {
   getSetting("extensionEnabled", true).then((enabled) => {
     if (enabled === false) {
+      // If extension is disabled, ensure no media block is present.
+      const existingBlock = document.getElementById("jpdb-media-block");
+      if (existingBlock) existingBlock.remove();
       return;
     }
     init();
