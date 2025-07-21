@@ -44,8 +44,9 @@ setInterval(() => {
   if (location.href !== lastUrl) {
     lastUrl = location.href;
     initIfEnabled(); // re-run if enabled when URL changes
+    console.log("exec...");
   }
-}, 1000);
+}, 10);
 
 // ------------------------------
 // Utility Functions
