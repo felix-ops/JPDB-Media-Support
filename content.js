@@ -45,7 +45,7 @@ setInterval(() => {
     lastUrl = location.href;
     initIfEnabled(); // re-run if enabled when URL changes
   }
-}, 1000);
+}, 10);
 
 // ------------------------------
 // Utility Functions
