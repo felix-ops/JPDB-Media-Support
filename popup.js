@@ -3,7 +3,7 @@
 const db = new Dexie("JPDBMediaSupportDB");
 // Use the NEW, EFFICIENT SCHEMA. This must match background.js
 db.version(1).stores({
-  cards: "cardId, deckName", // Lightweight metadata table
+  cards: "cardId", // Lightweight metadata table
   media: "cardId", // Heavy media blobs table
   vids: "vid",
   settings: "key",
@@ -293,6 +293,31 @@ function chunkArray(array, chunkSize) {
   return chunks;
 }
 
+function base64ToBlob(base64, contentType = "", sliceSize = 512) {
+  const byteCharacters = atob(base64);
+  const byteArrays = [];
+  for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+    const slice = byteCharacters.slice(offset, offset + sliceSize);
+    const byteNumbers = new Array(slice.length);
+    for (let i = 0; i < slice.length; i++) {
+      byteNumbers[i] = slice.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    byteArrays.push(byteArray);
+  }
+  return new Blob(byteArrays, { type: contentType });
+}
+
+function getMimeType(filename) {
+  if (!filename) return "application/octet-stream";
+  if (filename.match(/\.(jpg|jpeg)$/i)) return "image/jpeg";
+  if (filename.match(/\.png$/i)) return "image/png";
+  if (filename.match(/\.gif$/i)) return "image/gif";
+  if (filename.match(/\.mp3$/i)) return "audio/mpeg";
+  if (filename.match(/\.ogg$/i)) return "audio/ogg";
+  return "application/octet-stream";
+}
+
 async function getVidsFromContext(contextTexts) {
   // contextTexts is an array of Japanese texts (max length: 100)
   const jpdbUrl = "https://jpdb.io/api/v1/parse";
@@ -485,7 +510,7 @@ async function fetchAndStoreData() {
   // ====================================================================
   resultDiv.innerText = `Found ${
     deckCardsToProcess.length + globalCardsToFix.length
-  } to update... `;
+  } cards to update... `;
 
   const textsToParse = deckCardsToProcess.map((c) => c.newJapaneseText);
   const filenamesToFetch = new Set();
@@ -512,7 +537,7 @@ async function fetchAndStoreData() {
 
   let allFetchedMedia = {};
   if (filenamesToFetch.size > 0) {
-    const filenameChunks = chunkArray(Array.from(filenamesToFetch), 100);
+    const filenameChunks = chunkArray(Array.from(filenamesToFetch), 500);
     for (let i = 0; i < filenameChunks.length; i++) {
       allFetchedMedia = {
         ...allFetchedMedia,
@@ -539,11 +564,18 @@ async function fetchAndStoreData() {
       vids: vidsForDeckCards[i] || [],
     });
     if (c.newImageFile || c.newAudioFile) {
+      const imageBase64 = allFetchedMedia[c.newImageFile] || null;
+      const audioBase64 = allFetchedMedia[c.newAudioFile] || null;
+
       mediaToStore.push({
         cardId: c.ankiCard.cardId,
         mediaData: {
-          image: allFetchedMedia[c.newImageFile] || null,
-          audio: allFetchedMedia[c.newAudioFile] || null,
+          image: imageBase64
+            ? base64ToBlob(imageBase64, getMimeType(c.newImageFile))
+            : null,
+          audio: audioBase64
+            ? base64ToBlob(audioBase64, getMimeType(c.newAudioFile))
+            : null,
         },
       });
     }
@@ -554,24 +586,39 @@ async function fetchAndStoreData() {
   }
 
   for (const card of globalCardsToFix) {
+    const imageBase64 = allFetchedMedia[card.image] || null;
+    const audioBase64 = allFetchedMedia[card.audio] || null;
     mediaToStore.push({
       cardId: card.cardId,
       mediaData: {
-        image: allFetchedMedia[card.image] || null,
-        audio: allFetchedMedia[card.audio] || null,
+        image: imageBase64
+          ? base64ToBlob(imageBase64, getMimeType(card.image))
+          : null,
+        audio: audioBase64
+          ? base64ToBlob(audioBase64, getMimeType(card.audio))
+          : null,
       },
     });
   }
 
+  const allAffectedVids = Object.keys(vidsToUpdate);
   const existingVids = await db.vids
     .where("vid")
-    .anyOf(Object.keys(vidsToUpdate))
+    .anyOf(allAffectedVids)
     .toArray();
+  const finalVidsMap = new Map();
   existingVids.forEach((dbVid) => {
-    if (vidsToUpdate[dbVid.vid])
-      dbVid.cards.forEach((cardId) => vidsToUpdate[dbVid.vid].add(cardId));
+    finalVidsMap.set(dbVid.vid, new Set(dbVid.cards));
   });
-  const finalVidsArray = Object.entries(vidsToUpdate).map(
+  for (const vid in vidsToUpdate) {
+    if (!finalVidsMap.has(vid)) {
+      finalVidsMap.set(vid, new Set());
+    }
+    const cardSet = finalVidsMap.get(vid);
+    vidsToUpdate[vid].forEach((cardId) => cardSet.add(cardId));
+  }
+
+  const finalVidsArray = Array.from(finalVidsMap.entries()).map(
     ([vid, cardIdSet]) => ({ vid, cards: Array.from(cardIdSet) })
   );
 

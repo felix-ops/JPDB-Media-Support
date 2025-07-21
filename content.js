@@ -130,19 +130,13 @@ async function fetchMediaFile(filename) {
   });
 }
 
-function base64ToBlob(base64, contentType = "", sliceSize = 512) {
-  const byteCharacters = atob(base64);
-  const byteArrays = [];
-  for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
-    const slice = byteCharacters.slice(offset, offset + sliceSize);
-    const byteNumbers = new Array(slice.length);
-    for (let i = 0; i < slice.length; i++) {
-      byteNumbers[i] = slice.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    byteArrays.push(byteArray);
-  }
-  return new Blob(byteArrays, { type: contentType });
+// --- UPDATED: Converts a Data URL (from background.js) or a raw base64 string (from fallback fetch) to a Blob ---
+async function dataToBlob(data, mimeType) {
+  // data can be a data URL "data:mime/type;base64,..." or just a base64 string
+  const response = await fetch(
+    data.startsWith("data:") ? data : `data:${mimeType};base64,${data}`
+  );
+  return await response.blob();
 }
 
 function removeExistingContent() {
@@ -199,11 +193,13 @@ function createMediaBlock() {
   imageContainer.style.justifyContent = "center";
   imageContainer.style.alignItems = "center";
   imageContainer.style.width = "100%";
+  // imageContainer.style.minHeight = "275px"; // Prevent layout shift
 
   const imgElem = document.createElement("img");
   imgElem.alt = "Vocabulary Image";
   imgElem.style.maxWidth = "500px";
-  imgElem.style.transition = "opacity 0.3s";
+  // The transition is removed for instantaneous swap
+  // imgElem.style.transition = "opacity 0.3s";
   imgElem.style.display = "none";
 
   imgElem.addEventListener("click", () => {
@@ -320,9 +316,7 @@ function createMediaBlock() {
 // ------------------------------
 // Setup Media Block (Navigation, etc.)
 // ------------------------------
-function setupMediaBlock(vid, jpdbData, cardIds, elements) {
-  // Obsolete preloading functions have been removed. Media is now loaded
-  // directly inside loadCard() for instant performance.
+async function setupMediaBlock(vid, jpdbData, cardIds, elements) {
   removeExistingContent();
 
   if (cardIds.length < 2) {
@@ -334,64 +328,90 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     elements.rightButton.style.pointerEvents = "none";
   }
 
+  // --- OPTIMIZATION START ---
+  const mediaCache = {}; // { cardId: { imageURL: '...', audioURL: '...' } }
   let currentCardIndex = 0;
 
-  async function getTokensForContext(contextText) {
-    const apiKey = await getSetting("jpdbApiKey", null).catch((error) => {
-      return null;
-    });
-    if (!apiKey) {
-      return { tokens: [], vocabulary: [] };
-    }
-    const jpdbUrl = "https://jpdb.io/api/v1/parse";
-    try {
-      const response = await fetch(jpdbUrl, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          text: contextText,
-          token_fields: ["vocabulary_index", "position", "length", "furigana"],
-          position_length_encoding: "utf16",
-          vocabulary_fields: [
-            "vid",
-            "sid",
-            "rid",
-            "spelling",
-            "reading",
-            "frequency_rank",
-            "meanings",
-          ],
-        }),
-      });
-      const data = await response.json();
-      return { tokens: data.tokens || [], vocabulary: data.vocabulary || [] };
-    } catch (error) {
-      return { tokens: [], vocabulary: [] };
-    }
-  }
+  // This function now handles both pre-cached data and fallback fetching.
+  const processAndCacheCard = async (cardId) => {
+    if (mediaCache[cardId]) return; // Already processed
 
-  async function loadCard(index) {
+    const cardData = jpdbData.cards[cardId];
+    if (!cardData) return;
+
+    let imageBase64 = null;
+    let audioBase64 = null;
+
+    // Source 1: Try to get media from the pre-fetched database cache.
+    if (cardData.mediaData) {
+      imageBase64 = cardData.mediaData.image;
+      audioBase64 = cardData.mediaData.audio;
+    }
+
+    // Source 2: Fallback to fetching from Anki if data was missing.
+    const imageFetchPromise =
+      !imageBase64 && cardData.image
+        ? fetchMediaFile(cardData.image)
+        : Promise.resolve(null);
+    const audioFetchPromise =
+      !audioBase64 && cardData.audio
+        ? fetchMediaFile(cardData.audio)
+        : Promise.resolve(null);
+
+    const [fetchedImage, fetchedAudio] = await Promise.all([
+      imageFetchPromise,
+      audioFetchPromise,
+    ]);
+
+    if (fetchedImage) imageBase64 = fetchedImage;
+    if (fetchedAudio) audioBase64 = fetchedAudio;
+
+    // Now, convert whatever data we found into Blobs.
+    const imageBlobPromise = imageBase64
+      ? dataToBlob(imageBase64, getMimeType(cardData.image))
+      : Promise.resolve(null);
+    const audioBlobPromise = audioBase64
+      ? dataToBlob(audioBase64, getMimeType(cardData.audio))
+      : Promise.resolve(null);
+
+    const [imageBlob, audioBlob] = await Promise.all([
+      imageBlobPromise,
+      audioBlobPromise,
+    ]);
+
+    mediaCache[cardId] = {
+      imageURL: imageBlob ? URL.createObjectURL(imageBlob) : null,
+      audioURL: audioBlob ? URL.createObjectURL(audioBlob) : null,
+    };
+  };
+
+  // Rewrite loadCard to be synchronous and use the cache.
+  function loadCard(index) {
     elements.cardCountElem.innerText = `${index + 1}/${cardIds.length}`;
     elements.cardCountElem.style.display = "block";
 
-    // The audio element is now persistent. Get a direct reference.
     const audioElem = elements.audioElem;
-
-    // Pause and reset the single audio element before loading new content.
     audioElem.pause();
-    audioElem.currentTime = 0;
-    audioElem.src = "";
 
     const cardId = cardIds[index];
-    if (!jpdbData.cards || !jpdbData.cards[cardId]) {
-      return;
-    }
     const cardData = jpdbData.cards[cardId];
+    if (!cardData) return;
 
+    // Instantly get URLs from cache.
+    const cachedMedia = mediaCache[cardId] || {};
+    audioElem.src = cachedMedia.audioURL || "";
+    elements.imgElem.src = cachedMedia.imageURL || "";
+    elements.imgElem.style.display = cachedMedia.imageURL ? "" : "none";
+
+    // Start auto-play if configured
+    getSetting("autoPlayAudio", false).then((autoPlay) => {
+      if (autoPlay && audioElem.src) {
+        audioElem.currentTime = 0;
+        audioElem.play().catch(() => {});
+      }
+    });
+
+    // --- The rest of the UI update logic from your original file ---
     const deckNameElem = elements.deckNameElem;
     if (cardData.deckName) {
       deckNameElem.innerText = cardData.deckName;
@@ -410,51 +430,23 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     jpContainer.classList.add("card-sentence", "jpdb-inserted");
     jpContainer.style.justifyContent = "center";
 
-    // --- AUDIO HANDLING (Simplified) ---
-    // Remove the audio button if it exists from a previous card
     const oldAudioBtn = document.getElementById("jpdb-media-audio-btn");
     if (oldAudioBtn) oldAudioBtn.remove();
 
     if (cardData.audio) {
       const audioBtn = document.createElement("a");
-      audioBtn.id = "jpdb-media-audio-btn"; // Give button a unique ID
+      audioBtn.id = "jpdb-media-audio-btn";
       audioBtn.className = "icon-link example-audio";
       audioBtn.href = "#";
       audioBtn.innerHTML =
         '<i class="ti ti-volume" style="color: #4b8dff;"></i>';
       audioBtn.addEventListener("click", (e) => {
         e.preventDefault();
-        // The audio element is persistent, so this always works
         pauseOtherAudios(audioElem);
         audioElem.currentTime = 0;
         audioElem.play();
       });
       jpContainer.appendChild(audioBtn);
-
-      // No need to create the audio element; we just use it.
-      const playAudio = () => {
-        getSetting("autoPlayAudio", false).then((autoPlay) => {
-          if (autoPlay && audioElem.paused) {
-            pauseOtherAudios(audioElem);
-            audioElem.play().catch((error) => {});
-          }
-        });
-      };
-
-      if (cardData.mediaData && cardData.mediaData.audio) {
-        const mimeAudio = getMimeType(cardData.audio);
-        const blob = base64ToBlob(cardData.mediaData.audio, mimeAudio);
-        audioElem.src = URL.createObjectURL(blob);
-        playAudio();
-      } else {
-        fetchMediaFile(cardData.audio).then((audioData) => {
-          if (audioData) {
-            const mimeAudio = getMimeType(cardData.audio);
-            audioElem.src = `data:${mimeAudio};base64,${audioData}`;
-            playAudio();
-          }
-        });
-      }
     }
 
     const jpSentence = document.createElement("div");
@@ -465,40 +457,10 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     jpSentence.innerText = japaneseText;
     jpContainer.appendChild(jpSentence);
 
-    // Clear the old text content and append the new
     elements.contextElem.innerHTML = "";
     elements.contextElem.appendChild(jpContainer);
 
-    // --- Tokenizer and other logic remains the same ---
-    if (japaneseText) {
-      getTokensForContext(japaneseText).then((tokenData) => {
-        const tokens = tokenData.tokens;
-        const vocabulary = tokenData.vocabulary;
-        let newContextHtml = "";
-        let lastIndex = 0;
-        tokens.sort((a, b) => a[1] - b[1]);
-        tokens.forEach((token) => {
-          const tokenStart = token[1];
-          const tokenLength = token[2];
-          const tokenEnd = tokenStart + tokenLength;
-          newContextHtml += japaneseText.substring(lastIndex, tokenStart);
-          const tokenText = japaneseText.substring(tokenStart, tokenEnd);
-          if (token[3] !== null) {
-            const vocabEntry = vocabulary[token[0]];
-            if (vocabEntry && String(vocabEntry[0]) === String(vid)) {
-              newContextHtml += `<span style="color: #4b8dff; font-weight: bold;">${tokenText}</span>`;
-            } else {
-              newContextHtml += tokenText;
-            }
-          } else {
-            newContextHtml += tokenText;
-          }
-          lastIndex = tokenEnd;
-        });
-        newContextHtml += japaneseText.substring(lastIndex);
-        jpSentence.innerHTML = newContextHtml;
-      });
-    }
+    getTokensForContext(vid, japaneseText, jpSentence);
 
     getSetting("showEnglishSentence", true).then((showEnglish) => {
       if (showEnglish && englishText) {
@@ -515,40 +477,14 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
       }
     });
 
-    if (cardData.image) {
-      elements.imgElem.style.height = "275px";
-      elements.imgElem.style.objectFit = "contain";
-      elements.imgElem.style.maxWidth = "100%";
-      elements.imgElem.style.maxHeight = "100%";
-
-      if (cardData.mediaData && cardData.mediaData.image) {
-        const mimeImg = getMimeType(cardData.image);
-        const blob = base64ToBlob(cardData.mediaData.image, mimeImg);
-        elements.imgElem.src = URL.createObjectURL(blob);
-        elements.imgElem.style.opacity = 1;
-        elements.imgElem.style.display = "";
-      } else {
-        fetchMediaFile(cardData.image).then((imageData) => {
-          if (imageData) {
-            const mimeImg = getMimeType(cardData.image);
-            const blob = base64ToBlob(imageData, mimeImg);
-            elements.imgElem.src = URL.createObjectURL(blob);
-            elements.imgElem.style.opacity = 1;
-            elements.imgElem.style.display = "";
-          } else {
-            elements.imgElem.src = "";
-            elements.imgElem.style.display = "none";
-          }
-        });
-      }
-    } else {
-      elements.imgElem.src = "";
-      elements.imgElem.style.display = "none";
-    }
+    elements.imgElem.style.height = "275px";
+    elements.imgElem.style.objectFit = "contain";
+    elements.imgElem.style.maxWidth = "100%";
+    elements.imgElem.style.maxHeight = "100%";
+    elements.imgElem.style.opacity = 1;
   }
 
-  loadCard(currentCardIndex);
-
+  // Set up navigation
   elements.leftButton.addEventListener("click", () => {
     currentCardIndex = (currentCardIndex - 1 + cardIds.length) % cardIds.length;
     loadCard(currentCardIndex);
@@ -557,14 +493,76 @@ function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     currentCardIndex = (currentCardIndex + 1) % cardIds.length;
     loadCard(currentCardIndex);
   });
-
   document.addEventListener("keydown", (event) => {
-    if (event.key === "ArrowLeft") {
-      elements.leftButton.click();
-    } else if (event.key === "ArrowRight") {
-      elements.rightButton.click();
+    if (document.getElementById("jpdb-media-block")) {
+      if (event.key === "ArrowLeft") elements.leftButton.click();
+      if (event.key === "ArrowRight") elements.rightButton.click();
     }
   });
+
+  // Setup memory cleanup
+  const observer = new MutationObserver(() => {
+    if (!document.getElementById("jpdb-media-block")) {
+      Object.values(mediaCache).forEach(({ imageURL, audioURL }) => {
+        if (imageURL) URL.revokeObjectURL(imageURL);
+        if (audioURL) URL.revokeObjectURL(audioURL);
+      });
+      observer.disconnect();
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  // --- Prioritized Preloading Execution ---
+  // 1. Process and load the first card IMMEDIATELY.
+  processAndCacheCard(cardIds[0]).then(() => {
+    loadCard(0);
+    // 2. Then, process the rest of the cards in the background.
+    if (cardIds.length > 1) {
+      Promise.all(cardIds.slice(1).map(processAndCacheCard));
+    }
+  });
+  // --- OPTIMIZATION END ---
+}
+
+// This helper function is now fire-and-forget
+async function getTokensForContext(vid, contextText, elementToUpdate) {
+  if (!contextText) return;
+  try {
+    const apiKey = await getSetting("jpdbApiKey", null);
+    if (!apiKey) return;
+    const response = await fetch("https://jpdb.io/api/v1/parse", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text: contextText,
+        token_fields: ["vocabulary_index", "position", "length"],
+        vocabulary_fields: ["vid"],
+      }),
+    });
+    const data = await response.json();
+    let newHtml = "";
+    let lastIndex = 0;
+    data.tokens
+      .sort((a, b) => a[1] - b[1])
+      .forEach(([vocabIndex, start, length]) => {
+        newHtml += contextText.substring(lastIndex, start);
+        const tokenText = contextText.substring(start, start + length);
+        const isTarget =
+          data.vocabulary[vocabIndex] &&
+          String(data.vocabulary[vocabIndex][0]) === String(vid);
+        newHtml += isTarget
+          ? `<span style="color: #4b8dff; font-weight: bold;">${tokenText}</span>`
+          : tokenText;
+        lastIndex = start + length;
+      });
+    newHtml += contextText.substring(lastIndex);
+    elementToUpdate.innerHTML = newHtml;
+  } catch {
+    elementToUpdate.innerHTML = contextText; // Fallback
+  }
 }
 
 function extractVidFromPlainHtml() {
@@ -579,18 +577,6 @@ function extractVidFromPlainHtml() {
   return null;
 }
 
-function stripJapaneseHtml(html) {
-  let tempDiv = document.createElement("div");
-  tempDiv.innerHTML = html;
-  return tempDiv.innerText;
-}
-
-function stripEnglishHtml(html) {
-  let tempDiv = document.createElement("div");
-  tempDiv.innerHTML = html.replace(/<br\s*\/?>/g, " ");
-  return tempDiv.innerText;
-}
-
 async function insertMediaInReview() {
   let vid = extractVidFromReviewUrl();
   if (!vid) {
@@ -601,27 +587,24 @@ async function insertMediaInReview() {
   const vidRecord = await getVidRecord(vid);
   if (!vidRecord || !vidRecord.cards || vidRecord.cards.length === 0) return;
 
-  const cardIds = vidRecord.cards;
+  const cardsMapping = await getCardsMapping(vidRecord.cards);
+  const cardIds = vidRecord.cards.filter((id) => cardsMapping[id]);
+  if (cardIds.length === 0) return;
+
   const elements = createMediaBlock();
-  const mainContent = document.querySelector(".result.vocabulary .vbox.gap");
+  const mainContent = await waitForElement(".result.vocabulary .vbox.gap");
   document.body.style.maxWidth = "75rem";
-  if (mainContent) {
-    const wrapper = document.createElement("div");
-    wrapper.style.display = "flex";
-    wrapper.style.flexDirection = "row";
-    wrapper.style.alignItems = "flex-start";
-    wrapper.style.width = "100%";
+  const wrapper = document.createElement("div");
+  wrapper.style.display = "flex";
+  wrapper.style.flexDirection = "row";
+  wrapper.style.alignItems = "flex-start";
+  wrapper.style.width = "100%";
 
-    mainContent.parentNode.insertBefore(wrapper, mainContent);
-    wrapper.appendChild(mainContent);
-    mainContent.style.flex = "1";
-    wrapper.appendChild(elements.mediaBlock);
-    elements.mediaBlock.style.marginLeft = "40px";
-  } else {
-    document.body.appendChild(elements.mediaBlock);
-  }
-
-  const cardsMapping = await getCardsMapping(cardIds);
+  mainContent.parentNode.insertBefore(wrapper, mainContent);
+  wrapper.appendChild(mainContent);
+  mainContent.style.flex = "1";
+  wrapper.appendChild(elements.mediaBlock);
+  elements.mediaBlock.style.marginLeft = "40px";
 
   cardIds.sort((a, b) => {
     const cardA = cardsMapping[a];
@@ -643,16 +626,13 @@ async function insertMediaInVocabularyPage() {
   const vidRecord = await getVidRecord(vid);
   if (!vidRecord || !vidRecord.cards || vidRecord.cards.length === 0) return;
 
-  const cardIds = vidRecord.cards;
-  const elements = createMediaBlock();
-  const meaningsElem = document.querySelector(".subsection-meanings");
-  if (meaningsElem && meaningsElem.parentElement) {
-    meaningsElem.parentElement.insertBefore(elements.mediaBlock, meaningsElem);
-  } else {
-    document.body.appendChild(elements.mediaBlock);
-  }
+  const cardsMapping = await getCardsMapping(vidRecord.cards);
+  const cardIds = vidRecord.cards.filter((id) => cardsMapping[id]);
+  if (cardIds.length === 0) return;
 
-  const cardsMapping = await getCardsMapping(cardIds);
+  const elements = createMediaBlock();
+  const meaningsElem = await waitForElement(".subsection-meanings");
+  meaningsElem.parentElement.insertBefore(elements.mediaBlock, meaningsElem);
 
   cardIds.sort((a, b) => {
     const cardA = cardsMapping[a];
@@ -668,20 +648,21 @@ async function insertMediaInVocabularyPage() {
 }
 
 function init() {
+  if (document.getElementById("jpdb-media-block")) return;
+
   if (
     location.pathname.includes("/vocabulary/") &&
     !location.search.includes("c=")
   ) {
-    insertMediaInVocabularyPage();
+    insertMediaInVocabularyPage().catch(console.error);
   } else {
-    insertMediaInReview();
+    insertMediaInReview().catch(console.error);
   }
 }
 
 function initIfEnabled() {
   getSetting("extensionEnabled", true).then((enabled) => {
     if (enabled === false) {
-      // If extension is disabled, ensure no media block is present.
       const existingBlock = document.getElementById("jpdb-media-block");
       if (existingBlock) existingBlock.remove();
       return;

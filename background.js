@@ -4,91 +4,111 @@ importScripts("dexie.js");
 // Initialize Dexie DB with the NEW, EFFICIENT SCHEMA
 const db = new Dexie("JPDBMediaSupportDB");
 db.version(1).stores({
-  cards: "cardId, deckName", // Lightweight metadata table
+  cards: "cardId", // Lightweight metadata table
   media: "cardId", // Heavy media blobs table
   vids: "vid",
   settings: "key",
 });
 
+// --- NEW: Helper function to convert a Blob to a Base64 string ---
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      resolve(reader.result);
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
 // Listen for messages from content and popup scripts.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Action: fetchMediaFile (no change)
-  if (message.action === "fetchMediaFile") {
-    const ankiUrl = message.ankiUrl || "http://localhost:8765";
-    const filename = message.filename;
-    fetch(ankiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "retrieveMediaFile",
-        version: 6,
-        params: { filename: filename },
-      }),
-    })
-      .then((response) => response.json())
-      .then((data) => {
+  // Use an IIFE to handle async logic and `sendResponse` correctly.
+  (async () => {
+    // Action: fetchMediaFile (no change)
+    if (message.action === "fetchMediaFile") {
+      const ankiUrl = message.ankiUrl || "http://localhost:8765";
+      const filename = message.filename;
+      try {
+        const response = await fetch(ankiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "retrieveMediaFile",
+            version: 6,
+            params: { filename: filename },
+          }),
+        });
+        const data = await response.json();
         if (data.result) {
           sendResponse({ success: true, result: data.result });
         } else {
           sendResponse({ success: false, error: data.error });
         }
-      })
-      .catch((error) => {
+      } catch (error) {
         sendResponse({ success: false, error: error.message });
-      });
-    return true;
-  }
+      }
+    }
 
-  // Action: getSetting (no change)
-  else if (message.action === "getSetting") {
-    db.settings
-      .get(message.key)
-      .then((item) => {
+    // Action: getSetting (no change)
+    else if (message.action === "getSetting") {
+      try {
+        const item = await db.settings.get(message.key);
         sendResponse({ value: item ? item.value : undefined });
-      })
-      .catch((error) => {
+      } catch (error) {
         sendResponse({ success: false, error: error.message });
-      });
-    return true;
-  }
+      }
+    }
 
-  // Action: getVidRecord (no change)
-  else if (message.action === "getVidRecord") {
-    db.vids
-      .get(message.vid)
-      .then((result) => {
+    // Action: getVidRecord (no change)
+    else if (message.action === "getVidRecord") {
+      try {
+        const result = await db.vids.get(message.vid);
         sendResponse({ success: true, result: result });
-      })
-      .catch((error) => {
+      } catch (error) {
         sendResponse({ success: false, error: error.message });
-      });
-    return true;
-  }
+      }
+    }
 
-  // *** UPDATED: getCardsMapping now reads from TWO tables and joins them ***
-  else if (message.action === "getCardsMapping") {
-    // Fetch from both tables in parallel for maximum speed
-    Promise.all([
-      db.cards.bulkGet(message.cardIds),
-      db.media.bulkGet(message.cardIds),
-    ])
-      .then(([cardsArray, mediaArray]) => {
+    // *** UPDATED: getCardsMapping now converts Blobs to Base64 before sending ***
+    else if (message.action === "getCardsMapping") {
+      try {
+        const [cardsArray, mediaArray] = await Promise.all([
+          db.cards.bulkGet(message.cardIds),
+          db.media.bulkGet(message.cardIds),
+        ]);
+
         const mapping = {};
-        cardsArray.forEach((card, index) => {
-          if (card) {
-            // Re-attach the mediaData object so content.js doesn't need to change.
-            const mediaObject = mediaArray[index];
-            if (mediaObject) {
-              card.mediaData = mediaObject.mediaData;
-            }
-            mapping[card.cardId] = card;
+        for (let i = 0; i < cardsArray.length; i++) {
+          const card = cardsArray[i];
+          if (!card) continue;
+
+          const mediaObject = mediaArray[i];
+          if (mediaObject && mediaObject.mediaData) {
+            // Convert Blob to Base64 before sending
+            const imageBlob = mediaObject.mediaData.image;
+            const audioBlob = mediaObject.mediaData.audio;
+
+            const [imageBase64, audioBase64] = await Promise.all([
+              imageBlob ? blobToBase64(imageBlob) : null,
+              audioBlob ? blobToBase64(audioBlob) : null,
+            ]);
+
+            card.mediaData = {
+              image: imageBase64,
+              audio: audioBase64,
+            };
           }
-        });
+          mapping[card.cardId] = card;
+        }
         sendResponse({ success: true, result: mapping });
-      })
-      .catch((error) => {
+      } catch (error) {
         sendResponse({ success: false, error: error.message });
-      });
-    return true;
-  }
+      }
+    }
+  })(); // Immediately invoke the async function
+
+  // Return true to indicate that sendResponse will be called asynchronously.
+  return true;
 });
