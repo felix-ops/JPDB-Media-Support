@@ -39,13 +39,17 @@ function getCardsMapping(cardIds) {
 // ------------------------------
 // URL Change Detection (Polling)
 // ------------------------------
-let lastUrl = location.href;
-setInterval(() => {
-  if (location.href !== lastUrl) {
-    lastUrl = location.href;
-    initIfEnabled(); // re-run if enabled when URL changes
-  }
-}, 10);
+let lastHref = document.location.href;
+const observer = new MutationObserver((mutations) => {
+  mutations.forEach(() => {
+    if (lastHref !== document.location.href) {
+      lastHref = document.location.href;
+      initIfEnabled(); // re-run if enabled when URL changes
+    }
+  });
+});
+
+observer.observe(document.body, { childList: true, subtree: true });
 
 // ------------------------------
 // Utility Functions
