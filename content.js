@@ -625,6 +625,7 @@ async function getTokensForContext(vid, contextText, elementToUpdate) {
       body: JSON.stringify({
         text: contextText,
         token_fields: ["vocabulary_index", "position", "length"],
+        position_length_encoding: "utf16",
         vocabulary_fields: ["vid"],
       }),
     });
