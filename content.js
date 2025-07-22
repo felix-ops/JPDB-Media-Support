@@ -282,11 +282,25 @@ function createMediaBlock() {
     document.head.appendChild(style);
   }
 
+  // --- UPDATED: Create the Favorite Button ---
+  const favoriteButton = document.createElement("button");
+  favoriteButton.id = "jpdb-favorite-button";
+  favoriteButton.innerHTML = "☆"; // Empty star
+  favoriteButton.title = "Toggle Favorite (F)"; // Add shortcut hint
+  // New styles for inline display
+  favoriteButton.style.background = "transparent";
+  favoriteButton.style.border = "none";
+  favoriteButton.style.color = "#bbbbbb";
+  favoriteButton.style.fontSize = "22px";
+  favoriteButton.style.cursor = "pointer";
+  favoriteButton.style.padding = "5px";
+  favoriteButton.style.lineHeight = "1";
+
   imageContainer.appendChild(cardCountElem);
   imageContainer.appendChild(leftButton);
   imageContainer.appendChild(imgElem);
   imageContainer.appendChild(rightButton);
-  // imageContainer.appendChild(deckNameElem); //uncomment to show deck name on cards
+  // imageContainer.appendChild(deckNameElem);
 
   const contextElem = document.createElement("div");
   contextElem.style.display = "flex";
@@ -314,13 +328,14 @@ function createMediaBlock() {
     contextElem,
     audioElem,
     deckNameElem,
+    favoriteButton,
   };
 }
 
 // ------------------------------
 // Setup Media Block (Navigation, etc.)
 // ------------------------------
-async function setupMediaBlock(vid, jpdbData, cardIds, elements) {
+async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
   removeExistingContent();
 
   if (cardIds.length < 2) {
@@ -335,6 +350,7 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements) {
   // --- OPTIMIZATION START ---
   const mediaCache = {}; // { cardId: { imageURL: '...', audioURL: '...' } }
   let currentCardIndex = 0;
+  let favCards = vidRecord.favCards || [];
 
   // This function now handles both pre-cached data and fallback fetching.
   const processAndCacheCard = async (cardId) => {
@@ -401,6 +417,11 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     const cardData = jpdbData.cards[cardId];
     if (!cardData) return;
 
+    // --- NEW: Update favorite button state ---
+    const isFavorite = favCards.includes(cardId);
+    elements.favoriteButton.innerHTML = isFavorite ? "★" : "☆"; // Filled vs empty star
+    elements.favoriteButton.style.color = isFavorite ? "#4b8dff" : "#bbbbbb";
+
     // Instantly get URLs from cache.
     const cachedMedia = mediaCache[cardId] || {};
     audioElem.src = cachedMedia.audioURL || "";
@@ -433,6 +454,8 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     jpContainer.style.columnGap = "0.25rem";
     jpContainer.classList.add("card-sentence", "jpdb-inserted");
     jpContainer.style.justifyContent = "center";
+
+    jpContainer.appendChild(elements.favoriteButton);
 
     const oldAudioBtn = document.getElementById("jpdb-media-audio-btn");
     if (oldAudioBtn) oldAudioBtn.remove();
@@ -488,6 +511,44 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     elements.imgElem.style.opacity = 1;
   }
 
+  // --- NEW: Add event listener for the favorite button ---
+  elements.favoriteButton.addEventListener("click", () => {
+    const currentCardId = cardIds[currentCardIndex];
+    if (!currentCardId) return;
+
+    // Optimistically update UI
+    const isCurrentlyFavorite = favCards.includes(currentCardId);
+    elements.favoriteButton.innerHTML = isCurrentlyFavorite ? "☆" : "★";
+    elements.favoriteButton.style.color = isCurrentlyFavorite
+      ? "#bbbbbb"
+      : "#4b8dff";
+
+    // Send message to background to update DB
+    chrome.runtime.sendMessage(
+      { action: "toggleFavoriteCard", vid: vid, cardId: currentCardId },
+      (response) => {
+        if (response && response.success) {
+          // Update local state to match DB state
+          if (response.isFavorite) {
+            if (!favCards.includes(currentCardId)) {
+              favCards.unshift(currentCardId);
+            }
+          } else {
+            favCards = favCards.filter((id) => id !== currentCardId);
+          }
+        } else {
+          // Revert UI on failure
+          const isNowFavorite = favCards.includes(currentCardId);
+          elements.favoriteButton.innerHTML = isNowFavorite ? "★" : "☆";
+          elements.favoriteButton.style.color = isNowFavorite
+            ? "#4b8dff"
+            : "#bbbbbb";
+          console.error("Failed to toggle favorite:", response?.error);
+        }
+      }
+    );
+  });
+
   // Set up navigation
   elements.leftButton.addEventListener("click", () => {
     currentCardIndex = (currentCardIndex - 1 + cardIds.length) % cardIds.length;
@@ -497,10 +558,29 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements) {
     currentCardIndex = (currentCardIndex + 1) % cardIds.length;
     loadCard(currentCardIndex);
   });
+
+  // --- UPDATED: Keydown listener for arrows and favorite toggle ---
   document.addEventListener("keydown", (event) => {
     if (document.getElementById("jpdb-media-block")) {
       if (event.key === "ArrowLeft") elements.leftButton.click();
       if (event.key === "ArrowRight") elements.rightButton.click();
+      if (event.key === "f" || event.key === "F") {
+        const activeElem = document.activeElement;
+        const tagName = activeElem.tagName.toLowerCase();
+
+        // Block only if the user is in a text entry field.
+        // This allows the shortcut on buttons, divs, etc.
+        if (
+          tagName === "textarea" ||
+          (tagName === "input" &&
+            /text|email|password|search|url/.test(activeElem.type))
+        ) {
+          return;
+        }
+
+        event.preventDefault(); // Prevent default browser actions (e.g., find)
+        elements.favoriteButton.click();
+      }
     }
   });
 
@@ -518,13 +598,15 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements) {
 
   // --- Prioritized Preloading Execution ---
   // 1. Process and load the first card IMMEDIATELY.
-  processAndCacheCard(cardIds[0]).then(() => {
-    loadCard(0);
-    // 2. Then, process the rest of the cards in the background.
-    if (cardIds.length > 1) {
-      Promise.all(cardIds.slice(1).map(processAndCacheCard));
-    }
-  });
+  if (cardIds.length > 0) {
+    processAndCacheCard(cardIds[0]).then(() => {
+      loadCard(0);
+      // 2. Then, process the rest of the cards in the background.
+      if (cardIds.length > 1) {
+        Promise.all(cardIds.slice(1).map(processAndCacheCard));
+      }
+    });
+  }
   // --- OPTIMIZATION END ---
 }
 
@@ -591,8 +673,13 @@ async function insertMediaInReview() {
   const vidRecord = await getVidRecord(vid);
   if (!vidRecord || !vidRecord.cards || vidRecord.cards.length === 0) return;
 
-  const cardsMapping = await getCardsMapping(vidRecord.cards);
-  const cardIds = vidRecord.cards.filter((id) => cardsMapping[id]);
+  const favCards = vidRecord.favCards || [];
+  const regularCards = vidRecord.cards.filter((id) => !favCards.includes(id));
+  const orderedCardIds = [...favCards, ...regularCards];
+
+  const cardsMapping = await getCardsMapping(orderedCardIds);
+  const cardIds = orderedCardIds.filter((id) => cardsMapping[id]);
+
   if (cardIds.length === 0) return;
 
   const elements = createMediaBlock();
@@ -610,17 +697,9 @@ async function insertMediaInReview() {
   wrapper.appendChild(elements.mediaBlock);
   elements.mediaBlock.style.marginLeft = "40px";
 
-  cardIds.sort((a, b) => {
-    const cardA = cardsMapping[a];
-    const cardB = cardsMapping[b];
-    const isAPriority = cardA && cardA.deckName === "JPDB Media";
-    const isBPriority = cardB && cardB.deckName === "JPDB Media";
-    if (isAPriority && !isBPriority) return -1;
-    if (!isAPriority && isBPriority) return 1;
-    return 0;
-  });
-
-  setupMediaBlock(vid, { cards: cardsMapping }, cardIds, elements);
+  // Sorting based on deck name is handled within the original cardIds, not re-applied here.
+  // The primary sorting is now fav vs. non-fav.
+  setupMediaBlock(vid, { cards: cardsMapping }, cardIds, elements, vidRecord);
 }
 
 async function insertMediaInVocabularyPage() {
@@ -630,25 +709,20 @@ async function insertMediaInVocabularyPage() {
   const vidRecord = await getVidRecord(vid);
   if (!vidRecord || !vidRecord.cards || vidRecord.cards.length === 0) return;
 
-  const cardsMapping = await getCardsMapping(vidRecord.cards);
-  const cardIds = vidRecord.cards.filter((id) => cardsMapping[id]);
+  const favCards = vidRecord.favCards || [];
+  const regularCards = vidRecord.cards.filter((id) => !favCards.includes(id));
+  const orderedCardIds = [...favCards, ...regularCards];
+
+  const cardsMapping = await getCardsMapping(orderedCardIds);
+  const cardIds = orderedCardIds.filter((id) => cardsMapping[id]);
+
   if (cardIds.length === 0) return;
 
   const elements = createMediaBlock();
   const meaningsElem = await waitForElement(".subsection-meanings");
   meaningsElem.parentElement.insertBefore(elements.mediaBlock, meaningsElem);
 
-  cardIds.sort((a, b) => {
-    const cardA = cardsMapping[a];
-    const cardB = cardsMapping[b];
-    const isAPriority = cardA && cardA.deckName === "JPDB Media";
-    const isBPriority = cardB && cardB.deckName === "JPDB Media";
-    if (isAPriority && !isBPriority) return -1;
-    if (!isAPriority && isBPriority) return 1;
-    return 0;
-  });
-
-  setupMediaBlock(vid, { cards: cardsMapping }, cardIds, elements);
+  setupMediaBlock(vid, { cards: cardsMapping }, cardIds, elements, vidRecord);
 }
 
 function init() {

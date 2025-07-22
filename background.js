@@ -71,6 +71,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
 
+    // *** NEW: Action to toggle a card's favorite status ***
+    else if (message.action === "toggleFavoriteCard") {
+      try {
+        const { vid, cardId } = message;
+        if (!vid || !cardId) {
+          throw new Error("Missing vid or cardId");
+        }
+
+        await db.transaction("rw", db.vids, async () => {
+          const vidRecord = await db.vids.get(vid);
+          if (vidRecord) {
+            // Initialize favCards if it doesn't exist
+            if (!vidRecord.favCards) {
+              vidRecord.favCards = [];
+            }
+
+            const favIndex = vidRecord.favCards.indexOf(cardId);
+            if (favIndex > -1) {
+              // It's a favorite, so unfavorite it (remove from array)
+              vidRecord.favCards.splice(favIndex, 1);
+            } else {
+              // It's not a favorite, so favorite it (add to the beginning of the array)
+              vidRecord.favCards.unshift(cardId);
+            }
+            await db.vids.put(vidRecord);
+            sendResponse({ success: true, isFavorite: favIndex === -1 });
+          } else {
+            throw new Error(`VID record ${vid} not found.`);
+          }
+        });
+      } catch (error) {
+        sendResponse({ success: false, error: error.message });
+      }
+    }
+
     // *** UPDATED: getCardsMapping now converts Blobs to Base64 before sending ***
     else if (message.action === "getCardsMapping") {
       try {
