@@ -607,9 +607,9 @@ async function fetchAndStoreData() {
   // ====================================================================
   // CONSOLIDATED PROCESSING PHASE
   // ====================================================================
-  resultDiv.innerText = `Found ${
+  resultDiv.innerText = `Updating ${
     deckCardsToProcess.length + globalCardsToFix.length
-  } cards to update... `;
+  } cards... `;
 
   const textsToParse = deckCardsToProcess.map((c) => c.newJapaneseText);
   const filenamesToFetch = new Set();
