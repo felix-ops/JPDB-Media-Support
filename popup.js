@@ -2,7 +2,7 @@
 
 const db = new Dexie("JPDBMediaSupportDB");
 // Use the NEW, EFFICIENT SCHEMA. This must match background.js
-db.version(1).stores({
+db.version(2).stores({
   cards: "cardId", // Lightweight metadata table
   media: "cardId", // Heavy media blobs table
   vids: "vid",
