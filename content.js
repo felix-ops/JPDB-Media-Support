@@ -355,9 +355,10 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
   removeExistingContent();
 
   if (cardIds.length < 2) {
-    elements.leftButton.style.color = "grey";
+    elements.rightButton.style.color = "grey";
     elements.rightButton.style.cursor = "default";
     elements.rightButton.style.pointerEvents = "none";
+    elements.leftButton.style.color = "grey";
     elements.leftButton.style.cursor = "default";
     elements.leftButton.style.pointerEvents = "none";
   }
