@@ -287,14 +287,19 @@ function createMediaBlock() {
   favoriteButton.id = "jpdb-favorite-button";
   favoriteButton.innerHTML = "☆"; // Empty star
   favoriteButton.title = "Toggle Favorite"; // Add shortcut hint
-  // New styles for inline display
   favoriteButton.style.background = "rgba(0, 0, 0, 0)";
-  favoriteButton.style.border = "none";
   favoriteButton.style.color = "#bbbbbb";
-  favoriteButton.style.fontSize = "22px";
-  favoriteButton.style.cursor = "pointer";
-  favoriteButton.style.padding = "5px";
-  favoriteButton.style.lineHeight = "0";
+
+  Object.assign(favoriteButton.style, btnStyle, {
+    left: "auto", // override the 'left' from btnStyle if not needed
+    right: "auto", // override the 'right' from btnStyle
+    position: "relative", // Keep it in the document flow
+    top: "auto", // reset top
+    transform: "none", // reset transform
+    fontSize: "22px",
+    padding: "5px",
+    lineHeight: "0",
+  });
 
   imageContainer.appendChild(cardCountElem);
   imageContainer.appendChild(leftButton);

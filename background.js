@@ -142,6 +142,78 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: error.message });
       }
     }
+
+    // *** clears all Card Data
+    else if (message.action === "clearAllCards") {
+      try {
+        // Perform all clear operations within a single transaction
+        await db.transaction("rw", db.cards, db.media, db.vids, async () => {
+          await Promise.all([
+            db.cards.clear(),
+            db.media.clear(),
+            db.vids.clear(),
+          ]);
+        });
+        sendResponse({ success: true });
+      } catch (error) {
+        sendResponse({ success: false, error: error.message });
+      }
+    }
+
+    // *** clears all Media Blobs
+    else if (message.action === "clearAllMedia") {
+      try {
+        // Perform all clear operations within a single transaction
+        await db.transaction("rw", db.cards, db.media, db.vids, async () => {
+          await db.media.clear();
+        });
+        sendResponse({ success: true });
+      } catch (error) {
+        sendResponse({ success: false, error: error.message });
+      }
+    }
+
+    // *** Restores from Config file
+    else if (message.action === "restoreFromConfig") {
+      const configData = message.data;
+      if (!configData) {
+        sendResponse({
+          success: false,
+          error: "No configuration data provided.",
+        });
+        return;
+      }
+
+      try {
+        // Perform the ENTIRE operation in one transaction for atomicity
+        await db.transaction(
+          "rw",
+          db.settings,
+          db.cards,
+          db.media,
+          db.vids,
+          async () => {
+            // 1. Clear all existing data first
+            await Promise.all([
+              db.settings.clear(),
+              db.cards.clear(),
+              db.media.clear(), // Also clear media, as the config doesn't contain it
+              db.vids.clear(),
+            ]);
+
+            // 2. Bulk-load the new data from the config file
+            await Promise.all([
+              db.settings.bulkPut(configData.settings),
+              db.cards.bulkPut(configData.cards),
+              db.vids.bulkPut(configData.vids),
+            ]);
+          }
+        );
+        sendResponse({ success: true });
+      } catch (error) {
+        sendResponse({ success: false, error: error.message });
+      }
+    }
   })(); // Immediately invoke the async function
 
   // Return true to indicate that sendResponse will be called asynchronously.

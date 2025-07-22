@@ -819,8 +819,15 @@ document.addEventListener("DOMContentLoaded", () => {
           )
         ) {
           try {
-            await db.media.clear(); // Clear the media data
-            await saveSetting("fetchMediaToBrowser", false); // Save the setting
+            await saveSetting("fetchMediaToBrowser", false);
+            chrome.runtime.sendMessage(
+              { action: "clearAllMedia" },
+              (response) => {
+                if (response && response.success) {
+                  updateCardCount();
+                }
+              }
+            );
           } catch (error) {
             alert("Failed to clear media cache: " + error.message);
             // If clearing fails, revert the checkbox state since the setting wasn't changed.
@@ -889,34 +896,47 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document
     .getElementById("configFileInput")
-    .addEventListener("change", async (event) => {
+    .addEventListener("change", (event) => {
       const file = event.target.files[0];
       if (!file) return;
+
       const reader = new FileReader();
-      reader.onload = async function (e) {
+
+      reader.onload = function (e) {
         try {
           const configData = JSON.parse(e.target.result);
-          await Promise.all([
-            db.settings.clear(),
-            db.cards.clear(),
-            db.media.clear(),
-            db.vids.clear(),
-          ]);
-          if (configData.settings)
-            await db.settings.bulkPut(configData.settings);
-          if (configData.cards) await db.cards.bulkPut(configData.cards);
-          if (configData.vids) await db.vids.bulkPut(configData.vids);
-          alert(
-            `Configuration loaded! Click "Fetch Data From Anki" to sync media files.`
+
+          // Validate that the config file has the expected properties
+          if (!configData.settings || !configData.cards || !configData.vids) {
+            alert("Invalid or corrupt configuration file.");
+            return;
+          }
+
+          // Delegate the entire restore process to the background script
+          chrome.runtime.sendMessage(
+            { action: "restoreFromConfig", data: configData },
+            (response) => {
+              if (response && response.success) {
+                alert(`Configuration loaded !`);
+                // Reload all UI elements from the newly restored DB
+                updateCardCount();
+                loadSettings();
+                fetchDecks();
+              } else {
+                alert(
+                  "Failed to load configuration: " +
+                    (response?.error || "Unknown error")
+                );
+              }
+            }
           );
-          updateCardCount();
-          loadSettings();
-          fetchDecks();
         } catch (err) {
           alert("Error parsing configuration file: " + err.message);
         }
       };
+
       reader.readAsText(file);
+      event.target.value = null;
     });
 
   document
@@ -928,10 +948,14 @@ document.addEventListener("DOMContentLoaded", () => {
         )
       ) {
         try {
-          await db.cards.clear();
-          await db.media.clear();
-          await db.vids.clear();
-          updateCardCount();
+          chrome.runtime.sendMessage(
+            { action: "clearAllCards" },
+            (response) => {
+              if (response && response.success) {
+                updateCardCount();
+              }
+            }
+          );
         } catch (error) {
           alert("An error occurred while deleting data.");
         }
