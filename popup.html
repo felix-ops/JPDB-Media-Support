@@ -435,6 +435,15 @@
         </label>
       </div>
 
+      <!-- Fetch Media Files Switch -->
+      <div class="form-group switch-container">
+        <span class="switch-label">Store Media Files on Browser</span>
+        <label class="switch">
+          <input type="checkbox" id="fetchMediaToBrowser" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
       <div
         class="form-group"
         style="display: flex; flex-direction: column; margin-bottom: 15px"
@@ -461,7 +470,6 @@
         </div>
       </div>
 
-      <button id="deleteData">Clear Data</button>
       <div class="button-group">
         <button id="loadConfigButton">Import Config</button>
         <button id="saveConfigButton">Export Config</button>
@@ -472,9 +480,9 @@
         accept="application/json"
         style="display: none"
       />
-
       <!-- GitHub Page Button (Button only, no inline JS) -->
       <button id="githubButton">Visit GitHub Page for More Info...</button>
+      <button id="deleteData">Clear Data</button>
     </div>
     <script src="dexie.js"></script>
     <script src="popup.js"></script>

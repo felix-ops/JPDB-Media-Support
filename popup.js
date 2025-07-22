@@ -145,12 +145,14 @@ function loadSettings() {
     getSetting("jpdbApiKey", ""),
     getSetting("autoPlayAudio", false),
     getSetting("mediaBlockSize", "650"),
+    getSetting("fetchMediaToBrowser", false),
     // getSetting("autoSync", false) // Load autoSync setting
   ]).then(
     ([
       jpdbApiKey,
       autoPlayAudio,
       mediaBlockSize,
+      fetchMediaToBrowser,
       // autoSync
     ]) => {
       if (jpdbApiKey) {
@@ -158,6 +160,8 @@ function loadSettings() {
       }
       // Note: Field values are loaded in loadCardsAndFields after options are populated.
       document.getElementById("autoPlayAudio").checked = autoPlayAudio;
+      document.getElementById("fetchMediaToBrowser").checked =
+        fetchMediaToBrowser;
 
       // Load slider value for media block size.
       document.getElementById("mediaBlockSize").value = mediaBlockSize;
@@ -518,6 +522,9 @@ async function fetchAndStoreData() {
   resultDiv.style.display = "block";
   resultDiv.innerText = "Scanning for updates...";
 
+  // Get the state of the media fetch toggle
+  const shouldFetchMedia = await getSetting("fetchMediaToBrowser", false);
+
   // ====================================================================
   // UNIFIED SCANNING PHASE
   // ====================================================================
@@ -552,8 +559,12 @@ async function fetchAndStoreData() {
     const newAudioFile = audioField
       ? extractAudioFilename(ankiCard.fields[audioField].value.trim())
       : "";
+
+    // A card needs its media data if the toggle is on, it has media, and it's not in the DB
     const needsMediaData =
-      (newImageFile || newAudioFile) && !mediaIdSet.has(ankiCard.cardId);
+      shouldFetchMedia &&
+      (newImageFile || newAudioFile) &&
+      !mediaIdSet.has(ankiCard.cardId);
 
     if (
       !storedCard ||
@@ -574,13 +585,16 @@ async function fetchAndStoreData() {
   }
 
   // --- Check the rest of the DB *only* for missing media data ---
-  for (const storedCard of allDbCards) {
-    if (ankiCardIds.has(storedCard.cardId)) continue;
-    const needsMedia =
-      (storedCard.image || storedCard.audio) &&
-      !mediaIdSet.has(storedCard.cardId);
-    if (needsMedia) {
-      globalCardsToFix.push(storedCard);
+  // This only runs if the user wants to fetch media
+  if (shouldFetchMedia) {
+    for (const storedCard of allDbCards) {
+      if (ankiCardIds.has(storedCard.cardId)) continue;
+      const needsMedia =
+        (storedCard.image || storedCard.audio) &&
+        !mediaIdSet.has(storedCard.cardId);
+      if (needsMedia) {
+        globalCardsToFix.push(storedCard);
+      }
     }
   }
 
@@ -599,14 +613,18 @@ async function fetchAndStoreData() {
 
   const textsToParse = deckCardsToProcess.map((c) => c.newJapaneseText);
   const filenamesToFetch = new Set();
-  deckCardsToProcess.forEach((c) => {
-    if (c.newImageFile) filenamesToFetch.add(c.newImageFile);
-    if (c.newAudioFile) filenamesToFetch.add(c.newAudioFile);
-  });
-  globalCardsToFix.forEach((c) => {
-    if (c.image) filenamesToFetch.add(c.image);
-    if (c.audio) filenamesToFetch.add(c.audio);
-  });
+
+  // Only populate the list of files to fetch if the toggle is enabled
+  if (shouldFetchMedia) {
+    deckCardsToProcess.forEach((c) => {
+      if (c.newImageFile) filenamesToFetch.add(c.newImageFile);
+      if (c.newAudioFile) filenamesToFetch.add(c.newAudioFile);
+    });
+    globalCardsToFix.forEach((c) => {
+      if (c.image) filenamesToFetch.add(c.image);
+      if (c.audio) filenamesToFetch.add(c.audio);
+    });
+  }
 
   let vidsForDeckCards = [];
   if (textsToParse.length > 0) {
@@ -614,10 +632,15 @@ async function fetchAndStoreData() {
     for (let i = 0; i < textChunks.length; i++) {
       const jpdbData = await getVidsFromContext(textChunks[i]);
       vidsForDeckCards.push(...(jpdbData?.vidsForCards || []));
-      progressBar.value = 0 + Math.round(((i + 1) / textChunks.length) * 40);
+
+      progressBar.value =
+        0 +
+        Math.round(
+          ((i + 1) / textChunks.length) * (shouldFetchMedia ? 40 : 100)
+        );
     }
   } else {
-    progressBar.value = 40;
+    progressBar.value = shouldFetchMedia ? 40 : 100;
   }
 
   let allFetchedMedia = {};
@@ -652,17 +675,19 @@ async function fetchAndStoreData() {
       const imageBase64 = allFetchedMedia[c.newImageFile] || null;
       const audioBase64 = allFetchedMedia[c.newAudioFile] || null;
 
-      mediaToStore.push({
-        cardId: c.ankiCard.cardId,
-        mediaData: {
-          image: imageBase64
-            ? base64ToBlob(imageBase64, getMimeType(c.newImageFile))
-            : null,
-          audio: audioBase64
-            ? base64ToBlob(audioBase64, getMimeType(c.newAudioFile))
-            : null,
-        },
-      });
+      if (imageBase64 || audioBase64) {
+        mediaToStore.push({
+          cardId: c.ankiCard.cardId,
+          mediaData: {
+            image: imageBase64
+              ? base64ToBlob(imageBase64, getMimeType(c.newImageFile))
+              : null,
+            audio: audioBase64
+              ? base64ToBlob(audioBase64, getMimeType(c.newAudioFile))
+              : null,
+          },
+        });
+      }
     }
     for (const vid of vidsForDeckCards[i] || []) {
       if (!vidsToUpdate[vid]) vidsToUpdate[vid] = new Set();
@@ -670,20 +695,23 @@ async function fetchAndStoreData() {
     }
   }
 
+  // `globalCardsToFix` will only have items if `shouldFetchMedia` is true
   for (const card of globalCardsToFix) {
     const imageBase64 = allFetchedMedia[card.image] || null;
     const audioBase64 = allFetchedMedia[card.audio] || null;
-    mediaToStore.push({
-      cardId: card.cardId,
-      mediaData: {
-        image: imageBase64
-          ? base64ToBlob(imageBase64, getMimeType(card.image))
-          : null,
-        audio: audioBase64
-          ? base64ToBlob(audioBase64, getMimeType(card.audio))
-          : null,
-      },
-    });
+    if (imageBase64 || audioBase64) {
+      mediaToStore.push({
+        cardId: card.cardId,
+        mediaData: {
+          image: imageBase64
+            ? base64ToBlob(imageBase64, getMimeType(card.image))
+            : null,
+          audio: audioBase64
+            ? base64ToBlob(audioBase64, getMimeType(card.audio))
+            : null,
+        },
+      });
+    }
   }
 
   const allAffectedVids = Object.keys(vidsToUpdate);
@@ -775,6 +803,35 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("loadConfigButton").addEventListener("click", () => {
     document.getElementById("configFileInput").click();
   });
+  document
+    .getElementById("fetchMediaToBrowser")
+    .addEventListener("change", async (e) => {
+      const isEnabled = e.target.checked;
+
+      if (isEnabled) {
+        // If the switch is turned ON, just save the new setting.
+        await saveSetting("fetchMediaToBrowser", true);
+      } else {
+        // If the switch is turned OFF, ask for confirmation before clearing data.
+        if (
+          confirm(
+            "Disabling this will clear all cached media (images/audio) from the browser to save space. Your card text and settings will be kept. Proceed?"
+          )
+        ) {
+          try {
+            await db.media.clear(); // Clear the media data
+            await saveSetting("fetchMediaToBrowser", false); // Save the setting
+          } catch (error) {
+            alert("Failed to clear media cache: " + error.message);
+            // If clearing fails, revert the checkbox state since the setting wasn't changed.
+            e.target.checked = true;
+          }
+        } else {
+          // If the user cancels, revert the checkbox to its previous "on" state.
+          e.target.checked = true;
+        }
+      }
+    });
   document.getElementById("autoPlayAudio").addEventListener("change", (e) => {
     saveSetting("autoPlayAudio", e.target.checked);
   });

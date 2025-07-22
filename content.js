@@ -286,15 +286,15 @@ function createMediaBlock() {
   const favoriteButton = document.createElement("button");
   favoriteButton.id = "jpdb-favorite-button";
   favoriteButton.innerHTML = "☆"; // Empty star
-  favoriteButton.title = "Toggle Favorite (F)"; // Add shortcut hint
+  favoriteButton.title = "Toggle Favorite"; // Add shortcut hint
   // New styles for inline display
-  favoriteButton.style.background = "transparent";
+  favoriteButton.style.background = rgba(0, 0, 0, 0);
   favoriteButton.style.border = "none";
   favoriteButton.style.color = "#bbbbbb";
   favoriteButton.style.fontSize = "22px";
   favoriteButton.style.cursor = "pointer";
   favoriteButton.style.padding = "5px";
-  favoriteButton.style.lineHeight = "1";
+  favoriteButton.style.lineHeight = "0";
 
   imageContainer.appendChild(cardCountElem);
   imageContainer.appendChild(leftButton);
