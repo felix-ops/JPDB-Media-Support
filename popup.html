@@ -199,6 +199,74 @@
         background-size: 10px 5px;
         padding-right: 20px;
       }
+      /* Combobox styles */
+      .combobox {
+        position: relative;
+      }
+      .combobox-input {
+        width: 100%;
+        padding: 8px;
+        background: none;
+        border: none;
+        border-bottom: 1px solid #888888;
+        color: #bbbbbb;
+        font-size: 14px;
+        outline: none;
+        transition: border-bottom-color 0.3s;
+        padding-right: 30px; /* Make space for the arrow */
+      }
+      .combobox-input:focus {
+        border-bottom-color: #4b8dff;
+      }
+      .combobox-arrow {
+        position: absolute;
+        right: 0;
+        top: 0;
+        width: 30px;
+        height: 100%;
+        cursor: pointer;
+        background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='5'%3E%3Cpolygon points='0,0 10,0 5,5' fill='%23888888'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: 10px 5px;
+      }
+      .combobox-options {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        width: 100%;
+        max-height: 200px;
+        overflow-y: auto;
+        background-color: #2c2c2c;
+        border: 1px solid #4b8dff;
+        border-radius: 0 0 4px 4px;
+        z-index: 1000;
+      }
+      .combobox-option {
+        padding: 10px;
+        cursor: pointer;
+        color: #bbbbbb;
+      }
+      .combobox-option:hover {
+        background-color: #4b8dff;
+        color: #181818;
+      }
+      /* Dark Theme Scrollbar for Combobox Options */
+      .combobox-options::-webkit-scrollbar {
+        width: 8px;
+      }
+      .combobox-options::-webkit-scrollbar-track {
+        background: #181818; /* Background of the scrollbar track */
+      }
+      .combobox-options::-webkit-scrollbar-thumb {
+        background-color: #555555; /* Color of the scrollbar handle */
+        border-radius: 4px;
+        border: 2px solid #181818; /* Padding around the handle */
+      }
+      .combobox-options::-webkit-scrollbar-thumb:hover {
+        background-color: #777777; /* Handle color on hover */
+      }
     </style>
   </head>
   <body>
@@ -236,34 +304,79 @@
 
       <div class="form-group">
         <label for="deckSelect">Select Deck</label>
-        <select id="deckSelect">
+        <div class="combobox">
+          <input
+            type="text"
+            class="combobox-input"
+            placeholder="-- Loading decks --"
+          />
+          <div class="combobox-arrow"></div>
+          <div class="combobox-options"></div>
+        </div>
+        <select id="deckSelect" style="display: none">
           <option value="">-- Loading decks --</option>
         </select>
       </div>
 
       <div class="form-group">
         <label for="japaneseFieldSelect">Japanese Sentence Field</label>
-        <select id="japaneseFieldSelect">
+        <div class="combobox">
+          <input
+            type="text"
+            class="combobox-input"
+            placeholder="-- Select Japanese field --"
+          />
+          <div class="combobox-arrow"></div>
+          <div class="combobox-options"></div>
+        </div>
+        <select id="japaneseFieldSelect" style="display: none">
           <option value="">-- Select Japanese field --</option>
         </select>
       </div>
       <div class="form-group">
         <label for="englishFieldSelect">Translated Sentence Field</label>
-        <select id="englishFieldSelect">
+        <div class="combobox">
+          <input
+            type="text"
+            class="combobox-input"
+            placeholder="-- Select English field --"
+          />
+          <div class="combobox-arrow"></div>
+          <div class="combobox-options"></div>
+        </div>
+        <select id="englishFieldSelect" style="display: none">
           <option value="">-- Select English field --</option>
         </select>
       </div>
 
       <div class="form-group">
         <label for="imageFieldSelect">Image Field</label>
-        <select id="imageFieldSelect">
+        <div class="combobox">
+          <input
+            type="text"
+            class="combobox-input"
+            placeholder="-- Select image field --"
+          />
+          <div class="combobox-arrow"></div>
+          <div class="combobox-options"></div>
+        </div>
+        <select id="imageFieldSelect" style="display: none">
           <option value="">-- Select image field --</option>
         </select>
       </div>
 
       <div class="form-group">
         <label for="audioFieldSelect">Audio Field</label>
-        <select id="audioFieldSelect">
+        <div class="combobox">
+          <input
+            type="text"
+            class="combobox-input"
+            placeholder="-- Select audio field --"
+          />
+          <div class="combobox-arrow"></div>
+          <div class="combobox-options"></div>
+        </div>
+        <select id="audioFieldSelect" style="display: none">
           <option value="">-- Select audio field --</option>
         </select>
       </div>
