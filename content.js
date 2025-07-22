@@ -118,6 +118,17 @@ async function getAnkiUrl() {
   return getSetting("ankiUrl", "http://localhost:8765");
 }
 
+function getMediaForCard(cardId) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage(
+      { action: "getMediaForCard", cardId: cardId },
+      (response) => {
+        resolve(response && response.success ? response.mediaData : null);
+      }
+    );
+  });
+}
+
 async function fetchMediaFile(filename) {
   const ankiUrl = await getAnkiUrl();
   return new Promise((resolve) => {
@@ -345,11 +356,10 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
 
   if (cardIds.length < 2) {
     elements.leftButton.style.color = "grey";
-    elements.rightButton.style.color = "grey";
-    elements.leftButton.style.cursor = "default";
     elements.rightButton.style.cursor = "default";
-    elements.leftButton.style.pointerEvents = "none";
     elements.rightButton.style.pointerEvents = "none";
+    elements.leftButton.style.cursor = "default";
+    elements.leftButton.style.pointerEvents = "none";
   }
 
   const mediaCache = {}; // { cardId: { imageURL: '...', audioURL: '...' } }
@@ -357,18 +367,18 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
   let favCards = vidRecord.favCards || [];
 
   const processAndCacheCard = async (cardId) => {
-    if (mediaCache[cardId]) return;
+    if (mediaCache[cardId] || !cardId) return; // Already cached or invalid ID
 
     const cardData = jpdbData.cards[cardId];
     if (!cardData) return;
 
-    let imageBase64 = null;
-    let audioBase64 = null;
+    // To prevent multiple simultaneous fetches for the same card,
+    // we mark it as "caching in progress" immediately.
+    mediaCache[cardId] = { imageURL: null, audioURL: null };
 
-    if (cardData.mediaData) {
-      imageBase64 = cardData.mediaData.image;
-      audioBase64 = cardData.mediaData.audio;
-    }
+    const mediaFromDB = await getMediaForCard(cardId);
+    let imageBase64 = mediaFromDB?.image;
+    let audioBase64 = mediaFromDB?.audio;
 
     const imageFetchPromise =
       !imageBase64 && cardData.image
@@ -399,57 +409,80 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
       audioBlobPromise,
     ]);
 
+    // Update the cache with the final Object URLs
     mediaCache[cardId] = {
       imageURL: imageBlob ? URL.createObjectURL(imageBlob) : null,
       audioURL: audioBlob ? URL.createObjectURL(audioBlob) : null,
     };
   };
 
-  async function loadMedia(index) {
+  /**
+   * NEW: Pre-loads a window of cards around the current index.
+   */
+  function preloadSurroundingCards(currentIndex) {
+    const PRELOAD_WINDOW = 20;
+    const totalCards = cardIds.length;
+    if (totalCards <= 1) return;
+
+    const cardIdsToPreload = new Set();
+
+    // Gather IDs for 10 cards forward
+    for (let i = 1; i <= PRELOAD_WINDOW; i++) {
+      const forwardIndex = (currentIndex + i) % totalCards;
+      cardIdsToPreload.add(cardIds[forwardIndex]);
+    }
+
+    // Gather IDs for 10 cards backward
+    for (let i = 1; i <= PRELOAD_WINDOW; i++) {
+      const backwardIndex = (currentIndex - i + totalCards) % totalCards;
+      cardIdsToPreload.add(cardIds[backwardIndex]);
+    }
+
+    // Asynchronously process each unique card ID in the preload window
+    for (const cardId of cardIdsToPreload) {
+      if (cardId && !mediaCache[cardId]) {
+        // Fire-and-forget the caching process.
+        processAndCacheCard(cardId).catch(console.error);
+      }
+    }
+  }
+
+  async function displayCard(index) {
     const cardId = cardIds[index];
     if (!cardId) return;
 
-    // If media is not cached, start fetching it.
+    // 1. Show text content immediately
+    const cardData = jpdbData.cards[cardId];
+    loadTextContent(cardData, index);
+
+    // 2. Fetch media for the current card if it's not already cached
     if (!mediaCache[cardId]) {
       await processAndCacheCard(cardId);
     }
 
-    // If the card has changed while fetching, do nothing.
-    if (currentCardIndex !== index) return;
+    // 3. If the user hasn't moved on, display the media for the current card
+    if (currentCardIndex === index) {
+      loadMediaContent(cardId);
+    }
 
-    // Display the cached media.
-    const cachedMedia = mediaCache[cardId] || {};
-    const audioElem = elements.audioElem;
-    audioElem.src = cachedMedia.audioURL || "";
-    elements.imgElem.src = cachedMedia.imageURL || "";
-    elements.imgElem.style.display = cachedMedia.imageURL ? "block" : "none";
-
-    // Start auto-play if configured
-    getSetting("autoPlayAudio", false).then((autoPlay) => {
-      if (autoPlay && audioElem.src) {
-        audioElem.currentTime = 0;
-        audioElem.play().catch(() => {});
-      }
-    });
+    // 4. Trigger the advanced pre-caching for surrounding cards
+    preloadSurroundingCards(index);
   }
 
-  function loadCard(index) {
+  function loadTextContent(cardData, index) {
+    if (!cardData) return;
+
     currentCardIndex = index;
     elements.cardCountElem.innerText = `${index + 1}/${cardIds.length}`;
     elements.cardCountElem.style.display = "block";
 
-    const audioElem = elements.audioElem;
-    audioElem.pause();
-
-    // Hide media elements until they are loaded
+    // Pause audio and clear media from view while loading
+    elements.audioElem.pause();
     elements.imgElem.style.display = "none";
     elements.imgElem.src = "";
-    audioElem.src = "";
+    elements.audioElem.src = "";
 
-    const cardId = cardIds[index];
-    const cardData = jpdbData.cards[cardId];
-    if (!cardData) return;
-
+    const cardId = cardData.cardId;
     const isFavorite = favCards.includes(cardId);
     elements.favoriteButton.innerHTML = isFavorite ? "★" : "☆";
     elements.favoriteButton.style.color = isFavorite ? "#4b8dff" : "#bbbbbb";
@@ -486,9 +519,9 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
         '<i class="ti ti-volume" style="color: #4b8dff;"></i>';
       audioBtn.addEventListener("click", (e) => {
         e.preventDefault();
-        pauseOtherAudios(audioElem);
-        audioElem.currentTime = 0;
-        audioElem.play();
+        pauseOtherAudios(elements.audioElem);
+        elements.audioElem.currentTime = 0;
+        elements.audioElem.play();
       });
       jpContainer.appendChild(audioBtn);
     }
@@ -526,11 +559,26 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
     elements.imgElem.style.maxWidth = "100%";
     elements.imgElem.style.maxHeight = "100%";
     elements.imgElem.style.opacity = 1;
-
-    // Asynchronously load the media for the current card.
-    loadMedia(index).catch(console.error);
   }
 
+  function loadMediaContent(cardId) {
+    const cachedMedia = mediaCache[cardId];
+    if (!cachedMedia) return;
+
+    const audioElem = elements.audioElem;
+    audioElem.src = cachedMedia.audioURL || "";
+    elements.imgElem.src = cachedMedia.imageURL || "";
+    elements.imgElem.style.display = cachedMedia.imageURL ? "block" : "none";
+
+    getSetting("autoPlayAudio", false).then((autoPlay) => {
+      if (autoPlay && audioElem.src) {
+        audioElem.currentTime = 0;
+        audioElem.play().catch(() => {});
+      }
+    });
+  }
+
+  // --- Event Listeners (No changes needed here) ---
   elements.favoriteButton.addEventListener("click", () => {
     const currentCardId = cardIds[currentCardIndex];
     if (!currentCardId) return;
@@ -553,6 +601,7 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
             favCards = favCards.filter((id) => id !== currentCardId);
           }
         } else {
+          // Revert UI on failure
           const isNowFavorite = favCards.includes(currentCardId);
           elements.favoriteButton.innerHTML = isNowFavorite ? "★" : "☆";
           elements.favoriteButton.style.color = isNowFavorite
@@ -566,11 +615,12 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
 
   elements.leftButton.addEventListener("click", () => {
     const newIndex = (currentCardIndex - 1 + cardIds.length) % cardIds.length;
-    loadCard(newIndex);
+    displayCard(newIndex);
   });
+
   elements.rightButton.addEventListener("click", () => {
     const newIndex = (currentCardIndex + 1) % cardIds.length;
-    loadCard(newIndex);
+    displayCard(newIndex);
   });
 
   document.addEventListener("keydown", (event) => {
@@ -580,7 +630,6 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
       if (event.key === "f" || event.key === "F") {
         const activeElem = document.activeElement;
         const tagName = activeElem.tagName.toLowerCase();
-
         if (
           tagName === "textarea" ||
           (tagName === "input" &&
@@ -588,7 +637,6 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
         ) {
           return;
         }
-
         event.preventDefault();
         elements.favoriteButton.click();
       }
@@ -607,14 +655,9 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
   observer.observe(document.body, { childList: true, subtree: true });
 
   if (cardIds.length > 0) {
-    loadCard(0);
-    if (cardIds.length > 1) {
-      // Pre-cache the other cards in the background.
-      cardIds.slice(1).forEach((cardId) => processAndCacheCard(cardId));
-    }
+    displayCard(0);
   }
 }
-
 // This helper function is now fire-and-forget
 async function getTokensForContext(vid, contextText, elementToUpdate) {
   if (!contextText) return;

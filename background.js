@@ -106,38 +106,40 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
 
-    // *** UPDATED: getCardsMapping now converts Blobs to Base64 before sending ***
+    // *** UPDATED: getCardsMapping now ONLY sends lightweight card metadata ***
     else if (message.action === "getCardsMapping") {
       try {
-        const [cardsArray, mediaArray] = await Promise.all([
-          db.cards.bulkGet(message.cardIds),
-          db.media.bulkGet(message.cardIds),
-        ]);
-
+        const cardsArray = await db.cards.bulkGet(message.cardIds);
         const mapping = {};
-        for (let i = 0; i < cardsArray.length; i++) {
-          const card = cardsArray[i];
-          if (!card) continue;
-
-          const mediaObject = mediaArray[i];
-          if (mediaObject && mediaObject.mediaData) {
-            // Convert Blob to Base64 before sending
-            const imageBlob = mediaObject.mediaData.image;
-            const audioBlob = mediaObject.mediaData.audio;
-
-            const [imageBase64, audioBase64] = await Promise.all([
-              imageBlob ? blobToBase64(imageBlob) : null,
-              audioBlob ? blobToBase64(audioBlob) : null,
-            ]);
-
-            card.mediaData = {
-              image: imageBase64,
-              audio: audioBase64,
-            };
+        for (const card of cardsArray) {
+          if (card) {
+            mapping[card.cardId] = card;
           }
-          mapping[card.cardId] = card;
         }
         sendResponse({ success: true, result: mapping });
+      } catch (error) {
+        sendResponse({ success: false, error: error.message });
+      }
+    }
+
+    // *** NEW: Action to get media data for a SINGLE card ***
+    else if (message.action === "getMediaForCard") {
+      try {
+        const cardId = message.cardId;
+        const mediaObject = await db.media.get(cardId);
+        let responseData = { image: null, audio: null };
+
+        if (mediaObject && mediaObject.mediaData) {
+          const imageBlob = mediaObject.mediaData.image;
+          const audioBlob = mediaObject.mediaData.audio;
+
+          const [imageBase64, audioBase64] = await Promise.all([
+            imageBlob ? blobToBase64(imageBlob) : null,
+            audioBlob ? blobToBase64(audioBlob) : null,
+          ]);
+          responseData = { image: imageBase64, audio: audioBase64 };
+        }
+        sendResponse({ success: true, mediaData: responseData });
       } catch (error) {
         sendResponse({ success: false, error: error.message });
       }
