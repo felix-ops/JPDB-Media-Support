@@ -1,10 +1,12 @@
 /* popup.js using Dexie.js for IndexedDB */
 
 const db = new Dexie("JPDBMediaSupportDB");
-db.version(1).stores({
-  settings: "key",
-  cards: "cardId",
+// Use the NEW, EFFICIENT SCHEMA. This must match background.js
+db.version(2).stores({
+  cards: "cardId", // Lightweight metadata table
+  media: "cardId", // Heavy media blobs table
   vids: "vid",
+  settings: "key",
 });
 
 // --- Helper functions for settings ---
@@ -16,6 +18,114 @@ function getSetting(key, defaultValue) {
 
 function saveSetting(key, value) {
   return db.settings.put({ key, value });
+}
+
+/**
+ * Sets up a searchable combobox for a given <select> element.
+ * @param {string} selectId The ID of the <select> element.
+ */
+function setupCombobox(selectId) {
+  const selectElement = document.getElementById(selectId);
+  if (!selectElement) return;
+
+  const combobox = selectElement.previousElementSibling;
+  const input = combobox.querySelector(".combobox-input");
+  const optionsContainer = combobox.querySelector(".combobox-options");
+  const arrow = combobox.querySelector(".combobox-arrow");
+
+  /**
+   * Rebuilds the visible dropdown options from the hidden <select>
+   * and attaches click handlers.
+   */
+  function refreshOptions() {
+    optionsContainer.innerHTML = ""; // Clear existing options
+
+    // Create a visible div for each option in the <select>
+    Array.from(selectElement.options).forEach((option) => {
+      const optionElement = document.createElement("div");
+      optionElement.classList.add("combobox-option");
+      optionElement.textContent = option.text;
+      optionElement.dataset.value = option.value;
+
+      optionElement.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        input.value = option.text;
+        selectElement.value = option.value;
+        optionsContainer.style.display = "none";
+        selectElement.dispatchEvent(new Event("change"));
+      });
+      optionsContainer.appendChild(optionElement);
+    });
+  }
+
+  /**
+   * Syncs the visible input's text to match the hidden select's current value.
+   */
+  function syncInputToSelect() {
+    const selectedOption = selectElement.options[selectElement.selectedIndex];
+    if (selectedOption) {
+      input.value = selectedOption.text;
+    } else {
+      input.value = "";
+    }
+  }
+
+  function filterOptions() {
+    const filter = input.value.toLowerCase();
+    optionsContainer
+      .querySelectorAll(".combobox-option")
+      .forEach((optionElement) => {
+        const text = optionElement.textContent.toLowerCase();
+        optionElement.style.display = text.includes(filter) ? "" : "none";
+      });
+  }
+
+  // --- Event Listeners for the Combobox ---
+
+  // On focus (from a click on input or arrow), open the dropdown,
+  // show all options, and select the text.
+  input.addEventListener("focus", () => {
+    optionsContainer.style.display = "block";
+    optionsContainer
+      .querySelectorAll(".combobox-option")
+      .forEach((opt) => (opt.style.display = ""));
+    input.select();
+  });
+
+  arrow.addEventListener("mousedown", (e) => {
+    e.preventDefault(); // Prevent the input from losing focus
+    const isVisible = getComputedStyle(optionsContainer).display === "block";
+
+    if (isVisible) {
+      optionsContainer.style.display = "none";
+    } else {
+      input.focus(); // Triggers the focus listener, which handles the rest
+    }
+  });
+
+  input.addEventListener("blur", () => {
+    setTimeout(() => {
+      optionsContainer.style.display = "none";
+      // On blur, revert the input to match the actual selected value in the hidden select.
+      syncInputToSelect();
+    }, 150);
+  });
+
+  input.addEventListener("input", filterOptions);
+
+  // When the hidden select changes (either by code or by our mousedown handler),
+  // update the visible input to match.
+  selectElement.addEventListener("change", syncInputToSelect);
+
+  const observer = new MutationObserver(() => {
+    refreshOptions();
+    syncInputToSelect();
+  });
+  observer.observe(selectElement, { childList: true });
+
+  // Initial setup
+  refreshOptions();
+  syncInputToSelect();
 }
 
 function loadExtensionEnabled() {
@@ -33,42 +143,25 @@ function loadHideNativeSentence() {
 function loadSettings() {
   Promise.all([
     getSetting("jpdbApiKey", ""),
-    getSetting("selectedJapaneseField", ""),
-    getSetting("selectedEnglishField", ""),
-    getSetting("selectedImageField", ""),
-    getSetting("selectedAudioField", ""),
     getSetting("autoPlayAudio", false),
     getSetting("mediaBlockSize", "650"),
+    getSetting("fetchMediaToBrowser", false),
     // getSetting("autoSync", false) // Load autoSync setting
   ]).then(
     ([
       jpdbApiKey,
-      selectedJapaneseField,
-      selectedEnglishField,
-      selectedImageField,
-      selectedAudioField,
       autoPlayAudio,
       mediaBlockSize,
+      fetchMediaToBrowser,
       // autoSync
     ]) => {
       if (jpdbApiKey) {
         document.getElementById("jpdbApiKey").value = jpdbApiKey;
       }
-      if (selectedJapaneseField) {
-        document.getElementById("japaneseFieldSelect").value =
-          selectedJapaneseField;
-      }
-      if (selectedEnglishField) {
-        document.getElementById("englishFieldSelect").value =
-          selectedEnglishField;
-      }
-      if (selectedImageField) {
-        document.getElementById("imageFieldSelect").value = selectedImageField;
-      }
-      if (selectedAudioField) {
-        document.getElementById("audioFieldSelect").value = selectedAudioField;
-      }
+      // Note: Field values are loaded in loadCardsAndFields after options are populated.
       document.getElementById("autoPlayAudio").checked = autoPlayAudio;
+      document.getElementById("fetchMediaToBrowser").checked =
+        fetchMediaToBrowser;
 
       // Load slider value for media block size.
       document.getElementById("mediaBlockSize").value = mediaBlockSize;
@@ -192,31 +285,29 @@ async function loadCardsAndFields() {
     const firstCard = window.fetchedCards[0];
     const fieldNames = Object.keys(firstCard.fields);
 
-    // Populate dropdowns for Japanese and English fields.
-    populateFieldDropdown("japaneseFieldSelect", fieldNames);
-    getSetting("selectedJapaneseField", "").then((val) => {
-      if (val) document.getElementById("japaneseFieldSelect").value = val;
-    });
-    populateFieldDropdown("englishFieldSelect", fieldNames);
-    getSetting("selectedEnglishField", "").then((val) => {
-      if (val) document.getElementById("englishFieldSelect").value = val;
-    });
+    // Helper to populate, get setting, and update the value and UI
+    const setField = (selectId, settingKey) => {
+      populateFieldDropdown(selectId, fieldNames);
+      getSetting(settingKey, "").then((val) => {
+        if (val) {
+          const el = document.getElementById(selectId);
+          el.value = val;
+          el.dispatchEvent(new Event("change")); // Triggers combobox UI update
+        }
+      });
+    };
 
-    // Populate dropdowns for image and audio fields.
-    populateFieldDropdown("imageFieldSelect", fieldNames);
-    getSetting("selectedImageField", "").then((val) => {
-      if (val) document.getElementById("imageFieldSelect").value = val;
-    });
-    populateFieldDropdown("audioFieldSelect", fieldNames);
-    getSetting("selectedAudioField", "").then((val) => {
-      if (val) document.getElementById("audioFieldSelect").value = val;
-    });
+    // Populate dropdowns and set their stored values
+    setField("japaneseFieldSelect", "selectedJapaneseField");
+    setField("englishFieldSelect", "selectedEnglishField");
+    setField("imageFieldSelect", "selectedImageField");
+    setField("audioFieldSelect", "selectedAudioField");
   } catch (error) {}
 }
 
 function populateFieldDropdown(selectId, fieldNames) {
   const selectElem = document.getElementById(selectId);
-  selectElem.innerHTML = '<option value="">-- Select a field --</option>';
+  selectElem.innerHTML = '<option value=""></option>'; // Start with a blank option
   fieldNames.forEach((fieldName) => {
     const option = document.createElement("option");
     option.value = fieldName;
@@ -291,6 +382,31 @@ function chunkArray(array, chunkSize) {
   return chunks;
 }
 
+function base64ToBlob(base64, contentType = "", sliceSize = 512) {
+  const byteCharacters = atob(base64);
+  const byteArrays = [];
+  for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+    const slice = byteCharacters.slice(offset, offset + sliceSize);
+    const byteNumbers = new Array(slice.length);
+    for (let i = 0; i < slice.length; i++) {
+      byteNumbers[i] = slice.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    byteArrays.push(byteArray);
+  }
+  return new Blob(byteArrays, { type: contentType });
+}
+
+function getMimeType(filename) {
+  if (!filename) return "application/octet-stream";
+  if (filename.match(/\.(jpg|jpeg)$/i)) return "image/jpeg";
+  if (filename.match(/\.png$/i)) return "image/png";
+  if (filename.match(/\.gif$/i)) return "image/gif";
+  if (filename.match(/\.mp3$/i)) return "audio/mpeg";
+  if (filename.match(/\.ogg$/i)) return "audio/ogg";
+  return "application/octet-stream";
+}
+
 async function getVidsFromContext(contextTexts) {
   // contextTexts is an array of Japanese texts (max length: 100)
   const jpdbUrl = "https://jpdb.io/api/v1/parse";
@@ -335,8 +451,46 @@ async function getVidsFromContext(contextTexts) {
   return { vidsForCards: [] };
 }
 
+async function retrieveMediaFilesInBatch(filenames) {
+  if (!filenames || filenames.length === 0) {
+    return {};
+  }
+  const ankiUrl = document.getElementById("url").value.trim();
+  const actions = filenames.map((filename) => ({
+    action: "retrieveMediaFile",
+    params: { filename: filename },
+  }));
+
+  try {
+    const response = await fetch(ankiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "multi",
+        version: 6,
+        params: { actions: actions },
+      }),
+    });
+    const data = await response.json();
+    if (data.error) {
+      console.error("AnkiConnect multi error:", data.error);
+      return {};
+    }
+
+    const mediaDataMap = {};
+    // The result is an array of base64 strings, matching the order of filenames sent.
+    data.result.forEach((result, index) => {
+      mediaDataMap[filenames[index]] = result;
+    });
+    return mediaDataMap;
+  } catch (error) {
+    console.error("Failed to batch fetch media files:", error);
+    return {};
+  }
+}
+
 async function fetchAndStoreData() {
-  // Retrieve field selections for Japanese, English, image, and audio.
+  // --- 1. INITIAL SETUP & VALIDATION ---
   const japaneseField = document.getElementById("japaneseFieldSelect").value;
   const englishField = document.getElementById("englishFieldSelect").value;
   const imageField = document.getElementById("imageFieldSelect").value;
@@ -345,17 +499,18 @@ async function fetchAndStoreData() {
   const progressBar = document.getElementById("progressBar");
   const deckName = document.getElementById("deckSelect").value;
 
-  // Save field settings
+  const deckNameParts = deckName.split("::");
+  const formattedDeckName = deckNameParts[deckNameParts.length - 1];
+
   saveSetting("selectedJapaneseField", japaneseField);
   saveSetting("selectedEnglishField", englishField);
   saveSetting("selectedImageField", imageField);
   saveSetting("selectedAudioField", audioField);
 
   if (!japaneseField) {
-    alert("Please select fields for Japanese, English, image, and audio.");
+    alert("Please select a field for the Japanese sentence.");
     return;
   }
-
   const token = document.getElementById("jpdbApiKey").value.trim();
   if (!token) {
     alert("Please enter a valid JPDB API key.");
@@ -364,229 +519,446 @@ async function fetchAndStoreData() {
 
   progressBar.style.display = "block";
   progressBar.value = 0;
-  const totalCards = window.fetchedCards.length;
+  resultDiv.style.display = "block";
+  resultDiv.innerText = "Scanning for updates...";
 
-  // Build an array of cleaned Japanese texts from each card.
-  const japaneseTexts = window.fetchedCards.map((card) => {
-    const rawJapaneseText = card.fields[japaneseField].value.trim();
-    return stripJapaneseHtml(rawJapaneseText);
-  });
+  // Get the state of the media fetch toggle
+  const shouldFetchMedia = await getSetting("fetchMediaToBrowser", false);
 
-  // Chunk the texts into groups of 100.
-  const textChunks = chunkArray(japaneseTexts, 100);
-  let allVidsForCards = [];
+  // ====================================================================
+  // UNIFIED SCANNING PHASE
+  // ====================================================================
 
-  // Process each chunk sequentially.
-  for (const chunk of textChunks) {
-    const jpdbData = await getVidsFromContext(chunk);
-    if (jpdbData && jpdbData.vidsForCards) {
-      allVidsForCards.push(...jpdbData.vidsForCards);
-    }
-  }
+  const ankiCards = window.fetchedCards;
+  const [allDbCards, mediaKeys] = await Promise.all([
+    db.cards.toArray(),
+    db.media.toCollection().keys(),
+  ]);
 
-  // Make sure we have the same number of results as cards.
-  if (allVidsForCards.length !== totalCards) {
-    console.warn("The number of results does not match the number of cards.");
-  }
+  const allDbCardsMap = new Map(allDbCards.map((c) => [c.cardId, c]));
+  const mediaIdSet = new Set(mediaKeys);
+  const ankiCardIds = new Set(ankiCards.map((c) => c.cardId));
 
-  for (let i = 0; i < totalCards; i++) {
-    const card = window.fetchedCards[i];
-    const cardId = card.cardId;
+  const deckCardsToProcess = [];
+  const globalCardsToFix = [];
 
-    // Retrieve raw HTML from the selected fields.
-    const rawJapaneseText = japaneseField
-      ? card.fields[japaneseField].value.trim()
+  // --- Check current deck for text/file changes or missing media data ---
+  for (const ankiCard of ankiCards) {
+    const storedCard = allDbCardsMap.get(ankiCard.cardId);
+    const newJapaneseText = stripJapaneseHtml(
+      ankiCard.fields[japaneseField].value.trim()
+    );
+    const newEnglishText = englishField
+      ? stripEnglishHtml(ankiCard.fields[englishField].value.trim())
       : "";
-    const rawEnglishText = englishField
-      ? card.fields[englishField].value.trim()
+    const newImageFile = imageField
+      ? extractImageFilenameUsingDOMParser(
+          ankiCard.fields[imageField].value.trim()
+        )
       : "";
-    const rawImageText = imageField ? card.fields[imageField].value.trim() : "";
-    const rawAudioText = audioField ? card.fields[audioField].value.trim() : "";
+    const newAudioFile = audioField
+      ? extractAudioFilename(ankiCard.fields[audioField].value.trim())
+      : "";
 
-    // Process texts using the provided functions.
-    const japaneseText = stripJapaneseHtml(rawJapaneseText);
-    const englishText = stripEnglishHtml(rawEnglishText);
+    // A card needs its media data if the toggle is on, it has media, and it's not in the DB
+    const needsMediaData =
+      shouldFetchMedia &&
+      (newImageFile || newAudioFile) &&
+      !mediaIdSet.has(ankiCard.cardId);
 
-    const imageFilename = extractImageFilenameUsingDOMParser(rawImageText);
-    const audioFilename = extractAudioFilename(rawAudioText);
-
-    // Check for an existing record; compare using the new field names.
-    let newCardData = await db.cards.get(cardId);
     if (
-      newCardData &&
-      newCardData.japaneseContext === japaneseText &&
-      newCardData.englishContext === englishText &&
-      newCardData.image === imageFilename &&
-      newCardData.audio === audioFilename &&
-      newCardData.deckName === deckName
+      !storedCard ||
+      storedCard.japaneseContext !== newJapaneseText ||
+      storedCard.englishContext !== newEnglishText ||
+      storedCard.image !== newImageFile ||
+      storedCard.audio !== newAudioFile ||
+      needsMediaData
     ) {
-      // Existing record is up-to-date; no need to update.
-    } else {
-      // Use the pre-fetched vids for this card (or an empty array if none)
-      const cardVids = allVidsForCards[i] || [];
-      newCardData = {
-        cardId,
-        deckName: deckName,
-        japaneseContext: japaneseText,
-        englishContext: englishText,
-        image: imageFilename,
-        audio: audioFilename,
-        vids: cardVids,
-      };
-      await db.cards.put(newCardData);
+      deckCardsToProcess.push({
+        ankiCard,
+        newJapaneseText,
+        newEnglishText,
+        newImageFile,
+        newAudioFile,
+      });
     }
+  }
 
-    // Update reverse mapping for vocabulary IDs.
-    for (const vid of newCardData.vids) {
-      let existingVid = await db.vids.get(vid);
-      if (existingVid) {
-        if (!existingVid.cards.includes(cardId)) {
-          existingVid.cards.push(cardId);
-          await db.vids.put(existingVid);
-        }
-      } else {
-        await db.vids.put({ vid: vid, cards: [cardId] });
+  // --- Check the rest of the DB *only* for missing media data ---
+  // This only runs if the user wants to fetch media
+  if (shouldFetchMedia) {
+    for (const storedCard of allDbCards) {
+      if (ankiCardIds.has(storedCard.cardId)) continue;
+      const needsMedia =
+        (storedCard.image || storedCard.audio) &&
+        !mediaIdSet.has(storedCard.cardId);
+      if (needsMedia) {
+        globalCardsToFix.push(storedCard);
       }
     }
-
-    progressBar.value = Math.round(((i + 1) / totalCards) * 100);
-    updateCardCount();
   }
 
+  if (deckCardsToProcess.length === 0 && globalCardsToFix.length === 0) {
+    progressBar.style.display = "none";
+    resultDiv.innerText = "Everything is already up-to-date!";
+    return;
+  }
+
+  // ====================================================================
+  // CONSOLIDATED PROCESSING PHASE
+  // ====================================================================
+  resultDiv.innerText = `Updating ${
+    deckCardsToProcess.length + globalCardsToFix.length
+  } cards... `;
+
+  const textsToParse = deckCardsToProcess.map((c) => c.newJapaneseText);
+  const filenamesToFetch = new Set();
+
+  // Only populate the list of files to fetch if the toggle is enabled
+  if (shouldFetchMedia) {
+    deckCardsToProcess.forEach((c) => {
+      if (c.newImageFile) filenamesToFetch.add(c.newImageFile);
+      if (c.newAudioFile) filenamesToFetch.add(c.newAudioFile);
+    });
+    globalCardsToFix.forEach((c) => {
+      if (c.image) filenamesToFetch.add(c.image);
+      if (c.audio) filenamesToFetch.add(c.audio);
+    });
+  }
+
+  let vidsForDeckCards = [];
+  if (textsToParse.length > 0) {
+    const textChunks = chunkArray(textsToParse, 100);
+    for (let i = 0; i < textChunks.length; i++) {
+      const jpdbData = await getVidsFromContext(textChunks[i]);
+      vidsForDeckCards.push(...(jpdbData?.vidsForCards || []));
+
+      progressBar.value =
+        0 +
+        Math.round(
+          ((i + 1) / textChunks.length) * (shouldFetchMedia ? 40 : 100)
+        );
+    }
+  } else {
+    progressBar.value = shouldFetchMedia ? 40 : 100;
+  }
+
+  let allFetchedMedia = {};
+  if (filenamesToFetch.size > 0) {
+    const filenameChunks = chunkArray(Array.from(filenamesToFetch), 500);
+    for (let i = 0; i < filenameChunks.length; i++) {
+      allFetchedMedia = {
+        ...allFetchedMedia,
+        ...(await retrieveMediaFilesInBatch(filenameChunks[i])),
+      };
+      progressBar.value =
+        40 + Math.round(((i + 1) / filenameChunks.length) * 60);
+    }
+  }
+
+  const cardsToStore = [];
+  const mediaToStore = [];
+  const vidsToUpdate = {};
+
+  for (let i = 0; i < deckCardsToProcess.length; i++) {
+    const c = deckCardsToProcess[i];
+    cardsToStore.push({
+      cardId: c.ankiCard.cardId,
+      deckName: formattedDeckName,
+      japaneseContext: c.newJapaneseText,
+      englishContext: c.newEnglishText,
+      image: c.newImageFile,
+      audio: c.newAudioFile,
+      vids: vidsForDeckCards[i] || [],
+    });
+    if (c.newImageFile || c.newAudioFile) {
+      const imageBase64 = allFetchedMedia[c.newImageFile] || null;
+      const audioBase64 = allFetchedMedia[c.newAudioFile] || null;
+
+      if (imageBase64 || audioBase64) {
+        mediaToStore.push({
+          cardId: c.ankiCard.cardId,
+          mediaData: {
+            image: imageBase64
+              ? base64ToBlob(imageBase64, getMimeType(c.newImageFile))
+              : null,
+            audio: audioBase64
+              ? base64ToBlob(audioBase64, getMimeType(c.newAudioFile))
+              : null,
+          },
+        });
+      }
+    }
+    for (const vid of vidsForDeckCards[i] || []) {
+      if (!vidsToUpdate[vid]) vidsToUpdate[vid] = new Set();
+      vidsToUpdate[vid].add(c.ankiCard.cardId);
+    }
+  }
+
+  // `globalCardsToFix` will only have items if `shouldFetchMedia` is true
+  for (const card of globalCardsToFix) {
+    const imageBase64 = allFetchedMedia[card.image] || null;
+    const audioBase64 = allFetchedMedia[card.audio] || null;
+    if (imageBase64 || audioBase64) {
+      mediaToStore.push({
+        cardId: card.cardId,
+        mediaData: {
+          image: imageBase64
+            ? base64ToBlob(imageBase64, getMimeType(card.image))
+            : null,
+          audio: audioBase64
+            ? base64ToBlob(audioBase64, getMimeType(card.audio))
+            : null,
+        },
+      });
+    }
+  }
+
+  const allAffectedVids = Object.keys(vidsToUpdate);
+  const existingVids = await db.vids
+    .where("vid")
+    .anyOf(allAffectedVids)
+    .toArray();
+  const finalVidsMap = new Map();
+  existingVids.forEach((dbVid) => {
+    finalVidsMap.set(dbVid.vid, new Set(dbVid.cards));
+  });
+  for (const vid in vidsToUpdate) {
+    if (!finalVidsMap.has(vid)) {
+      finalVidsMap.set(vid, new Set());
+    }
+    const cardSet = finalVidsMap.get(vid);
+    vidsToUpdate[vid].forEach((cardId) => cardSet.add(cardId));
+  }
+
+  const finalVidsArray = Array.from(finalVidsMap.entries()).map(
+    ([vid, cardIdSet]) => ({ vid, cards: Array.from(cardIdSet) })
+  );
+
+  await db.transaction("rw", db.cards, db.media, db.vids, async () => {
+    if (cardsToStore.length > 0) await db.cards.bulkPut(cardsToStore);
+    if (mediaToStore.length > 0) await db.media.bulkPut(mediaToStore);
+    if (finalVidsArray.length > 0) await db.vids.bulkPut(finalVidsArray);
+  });
+
   progressBar.style.display = "none";
-  resultDiv.innerText = `Data fetched and stored successfully!`;
+  let finalMessage = `Sync complete: ${
+    deckCardsToProcess.length + globalCardsToFix.length
+  } cards were added.`;
+  resultDiv.innerText = finalMessage;
   updateCardCount();
-  resultDiv.style.display = "block";
 }
 
 // ------------------------------
 // Event Listeners
 // ------------------------------
 document.addEventListener("DOMContentLoaded", () => {
+  // Setup all comboboxes once the DOM is ready.
+  [
+    "deckSelect",
+    "japaneseFieldSelect",
+    "englishFieldSelect",
+    "imageFieldSelect",
+    "audioFieldSelect",
+  ].forEach(setupCombobox);
+
+  // --- Primary Listeners ---
   fetchDecks();
   loadSettings();
   updateCardCount();
-});
-document
-  .getElementById("deckSelect")
-  .addEventListener("change", loadCardsAndFields);
-document
-  .getElementById("fetchData")
-  .addEventListener("click", fetchAndStoreData);
-document.getElementById("jpdbApiKey").addEventListener("change", (e) => {
-  saveSetting("jpdbApiKey", e.target.value.trim());
-});
 
-document
-  .getElementById("saveConfigButton")
-  .addEventListener("click", async () => {
-    const settings = await db.settings.toArray();
-    const cards = await db.cards.toArray();
-    const vids = await db.vids.toArray();
-    const configData = { settings, cards, vids };
-    const json = JSON.stringify(configData, null, 2);
+  document
+    .getElementById("deckSelect")
+    .addEventListener("change", loadCardsAndFields);
+  document
+    .getElementById("fetchData")
+    .addEventListener("click", fetchAndStoreData);
 
-    // Get the total card count from the database
-    const totalCardCount = await db.cards.count();
-
-    // Create the filename with the total card count
-    const filename = `JPDB_Media_Config_${totalCardCount}.json`;
-
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename; // Use the dynamic filename here
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  // --- Listeners for saving settings on change ---
+  document.getElementById("jpdbApiKey").addEventListener("change", (e) => {
+    saveSetting("jpdbApiKey", e.target.value.trim());
   });
+  document
+    .getElementById("japaneseFieldSelect")
+    .addEventListener("change", (e) => {
+      saveSetting("selectedJapaneseField", e.target.value);
+    });
+  document
+    .getElementById("englishFieldSelect")
+    .addEventListener("change", (e) => {
+      saveSetting("selectedEnglishField", e.target.value);
+    });
+  document
+    .getElementById("imageFieldSelect")
+    .addEventListener("change", (e) => {
+      saveSetting("selectedImageField", e.target.value);
+    });
+  document
+    .getElementById("audioFieldSelect")
+    .addEventListener("change", (e) => {
+      saveSetting("selectedAudioField", e.target.value);
+    });
 
-document.getElementById("loadConfigButton").addEventListener("click", () => {
-  document.getElementById("configFileInput").click();
-});
-document
-  .getElementById("configFileInput")
-  .addEventListener("change", async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async function (e) {
-      try {
-        const configData = JSON.parse(e.target.result);
-        await Promise.all([
-          db.settings.clear(),
-          db.cards.clear(),
-          db.vids.clear(),
-        ]);
-        if (configData.settings) await db.settings.bulkPut(configData.settings);
-        if (configData.cards) await db.cards.bulkPut(configData.cards);
-        if (configData.vids) await db.vids.bulkPut(configData.vids);
-        alert("Configuration loaded successfully!");
-      } catch (err) {
-        alert("Error parsing configuration file: " + err.message);
+  // --- Other UI Listeners ---
+  document.getElementById("loadConfigButton").addEventListener("click", () => {
+    document.getElementById("configFileInput").click();
+  });
+  document
+    .getElementById("fetchMediaToBrowser")
+    .addEventListener("change", async (e) => {
+      const isEnabled = e.target.checked;
+
+      if (isEnabled) {
+        // If the switch is turned ON, just save the new setting.
+        await saveSetting("fetchMediaToBrowser", true);
+      } else {
+        // If the switch is turned OFF, ask for confirmation before clearing data.
+        if (
+          confirm(
+            "Disabling this will clear all cached media (images/audio) from the browser to save space. Your card text and settings will be kept. Proceed?"
+          )
+        ) {
+          try {
+            await saveSetting("fetchMediaToBrowser", false);
+            chrome.runtime.sendMessage(
+              { action: "clearAllMedia" },
+              (response) => {
+                if (response && response.success) {
+                  updateCardCount();
+                }
+              }
+            );
+          } catch (error) {
+            alert("Failed to clear media cache: " + error.message);
+            // If clearing fails, revert the checkbox state since the setting wasn't changed.
+            e.target.checked = true;
+          }
+        } else {
+          // If the user cancels, revert the checkbox to its previous "on" state.
+          e.target.checked = true;
+        }
       }
-    };
-    reader.readAsText(file);
+    });
+  document.getElementById("autoPlayAudio").addEventListener("change", (e) => {
+    saveSetting("autoPlayAudio", e.target.checked);
   });
-document.getElementById("autoPlayAudio").addEventListener("change", (e) => {
-  saveSetting("autoPlayAudio", e.target.checked);
-});
-document.getElementById("extensionEnabled").addEventListener("change", (e) => {
-  saveSetting("extensionEnabled", e.target.checked);
-});
-document
-  .getElementById("hideNativeSentence")
-  .addEventListener("change", (e) => {
-    saveSetting("hideNativeSentence", e.target.checked);
-  });
-document
-  .getElementById("mediaBlockSize")
-  .addEventListener("input", function (e) {
-    const size = e.target.value;
-    document.getElementById("mediaBlockSizeValue").innerText = size + "px";
-    saveSetting("mediaBlockSize", size);
-  });
-// document.getElementById("autoSync").addEventListener("change", (e) => {
-//   saveSetting("autoSync", e.target.checked);
-// });
-document
-  .getElementById("showEnglishSentence")
-  .addEventListener("change", (e) => {
-    saveSetting("showEnglishSentence", !e.target.checked);
-  });
+  document
+    .getElementById("extensionEnabled")
+    .addEventListener("change", (e) => {
+      saveSetting("extensionEnabled", e.target.checked);
+    });
+  document
+    .getElementById("hideNativeSentence")
+    .addEventListener("change", (e) => {
+      saveSetting("hideNativeSentence", e.target.checked);
+    });
+  document
+    .getElementById("mediaBlockSize")
+    .addEventListener("input", function (e) {
+      const size = e.target.value;
+      document.getElementById("mediaBlockSizeValue").innerText = size + "px";
+      saveSetting("mediaBlockSize", size);
+    });
+  document
+    .getElementById("showEnglishSentence")
+    .addEventListener("change", (e) => {
+      saveSetting("showEnglishSentence", !e.target.checked);
+    });
 
-document.addEventListener("DOMContentLoaded", () => {
   const githubButton = document.getElementById("githubButton");
   if (githubButton) {
     githubButton.addEventListener("click", () => {
       window.open("https://github.com/felix-ops/JPDB-Media-Support");
     });
   }
-});
 
-document
-  .getElementById("deckSelect")
-  .addEventListener("change", async function () {
-    await loadCardsAndFields();
-  });
+  document
+    .getElementById("saveConfigButton")
+    .addEventListener("click", async () => {
+      const settings = await db.settings.toArray();
+      const cards = await db.cards.toArray(); // Only save lightweight metadata
+      const vids = await db.vids.toArray();
+      // Do NOT save the heavy 'media' table to the config file
+      const configData = { settings, cards, vids };
+      const json = JSON.stringify(configData, null, 2);
+      const totalCardCount = await db.cards.count();
+      const filename = `JPDB_Media_Config_${totalCardCount}.json`;
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
 
-document
-  .getElementById("deleteData")
-  .addEventListener("click", async function () {
-    if (
-      confirm(
-        "Clearing the Data from here is totally safe and will not affect the Anki decks in any way.  It will only remove the relation in the extension's database"
-      )
-    ) {
-      try {
-        await db.cards.clear();
-        await db.vids.clear();
-        updateCardCount(); // Refresh the card count display
-        alert("Cards data have been cleared.");
-      } catch (error) {
-        alert("An error occurred while deleting data.");
+  document
+    .getElementById("configFileInput")
+    .addEventListener("change", (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+
+      reader.onload = function (e) {
+        try {
+          const configData = JSON.parse(e.target.result);
+
+          // Validate that the config file has the expected properties
+          if (!configData.settings || !configData.cards || !configData.vids) {
+            alert("Invalid or corrupt configuration file.");
+            return;
+          }
+
+          // Delegate the entire restore process to the background script
+          chrome.runtime.sendMessage(
+            { action: "restoreFromConfig", data: configData },
+            (response) => {
+              if (response && response.success) {
+                alert(`Configuration loaded !`);
+                // Reload all UI elements from the newly restored DB
+                updateCardCount();
+                loadSettings();
+                fetchDecks();
+              } else {
+                alert(
+                  "Failed to load configuration: " +
+                    (response?.error || "Unknown error")
+                );
+              }
+            }
+          );
+        } catch (err) {
+          alert("Error parsing configuration file: " + err.message);
+        }
+      };
+
+      reader.readAsText(file);
+      event.target.value = null;
+    });
+
+  document
+    .getElementById("deleteData")
+    .addEventListener("click", async function () {
+      if (
+        confirm(
+          "Clearing the Data from here is totally safe and will not affect the Anki decks in any way.  It will only remove the data stored in the extension's database"
+        )
+      ) {
+        try {
+          chrome.runtime.sendMessage(
+            { action: "clearAllCards" },
+            (response) => {
+              if (response && response.success) {
+                updateCardCount();
+              }
+            }
+          );
+        } catch (error) {
+          alert("An error occurred while deleting data.");
+        }
       }
-    }
-  });
+    });
+});
