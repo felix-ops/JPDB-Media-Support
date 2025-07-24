@@ -944,7 +944,7 @@ document.addEventListener("DOMContentLoaded", () => {
     .addEventListener("click", async function () {
       if (
         confirm(
-          "Clearing the Data from here is totally safe and will not affect the Anki decks in any way.  It will only remove the data stored in the extension's database"
+          "'Delete All Cards' will remove all stored cards and favorites from the Extension. It is recommended to back up your data first using 'Export Config' to prevent accidental data loss."
         )
       ) {
         try {
