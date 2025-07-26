@@ -1,4 +1,4 @@
-# JPDB Media Importer Chrome Extension
+# JPDB Media Support Extension
 
 ## Overview
 
