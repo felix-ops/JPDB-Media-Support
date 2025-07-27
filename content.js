@@ -182,6 +182,56 @@ function removeExistingContent() {
   });
 }
 
+function injectResponsiveStyles() {
+  const styleId = "jpdb-responsive-styles";
+  // Avoid injecting the same styles multiple times
+  if (document.getElementById(styleId)) {
+    return;
+  }
+
+  const style = document.createElement("style");
+  style.id = styleId;
+  // Define a breakpoint. 1100px is a good starting point for this layout.
+  const breakpoint = "768px";
+
+  style.textContent = `
+    /* Wrapper for both JPDB content and our media block */
+    #jpdb-media-wrapper {
+      display: flex;
+      flex-direction: row; /* Side-by-side on desktop */
+      align-items: flex-start;
+      width: 100%;
+      gap: 40px; /* Replaces margin-left for better spacing */
+    }
+
+    #jpdb-media-block {
+      /* Make the block sticky on desktop for a nice scrolling effect */
+      position: sticky;
+      top: 20px;
+    }
+
+    /* --- MOBILE STYLES --- */
+    @media (max-width: ${breakpoint}) {
+      #jpdb-media-wrapper {
+        flex-direction: column; /* Stack elements vertically on smaller screens */
+        gap: 25px;
+      }
+
+      #jpdb-media-block {
+        /* This is the key part: 'order: -1' moves our media block
+           to the TOP of the flex container visually. */
+        order: -1;
+        position: relative; /* Un-stick it on mobile */
+        top: 0;
+        width: 100%; /* Make it full-width on mobile */
+        max-width: 100% !important; /* Ensure it doesn't exceed screen width */
+        margin-left: 0 !important; /* Override any old inline styles */
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 // ------------------------------
 // Create Media Block
 // ------------------------------
@@ -732,20 +782,18 @@ async function insertMediaInReview() {
 
   if (cardIds.length === 0) return;
 
+  injectResponsiveStyles();
+
   const elements = createMediaBlock();
   const mainContent = await waitForElement(".result.vocabulary .vbox.gap");
   document.body.style.maxWidth = "75rem";
   const wrapper = document.createElement("div");
-  wrapper.style.display = "flex";
-  wrapper.style.flexDirection = "row";
-  wrapper.style.alignItems = "flex-start";
-  wrapper.style.width = "100%";
+  wrapper.id = "jpdb-media-wrapper";
 
   mainContent.parentNode.insertBefore(wrapper, mainContent);
   wrapper.appendChild(mainContent);
   mainContent.style.flex = "1";
   wrapper.appendChild(elements.mediaBlock);
-  elements.mediaBlock.style.marginLeft = "40px";
 
   setupMediaBlock(vid, { cards: cardsMapping }, cardIds, elements, vidRecord);
 }
@@ -766,9 +814,18 @@ async function insertMediaInVocabularyPage() {
 
   if (cardIds.length === 0) return;
 
+  injectResponsiveStyles();
+
   const elements = createMediaBlock();
-  const meaningsElem = await waitForElement(".subsection-meanings");
-  meaningsElem.parentElement.insertBefore(elements.mediaBlock, meaningsElem);
+  const mainContent = await waitForElement(".subsection-meanings");
+
+  const wrapper = document.createElement("div");
+  wrapper.id = "jpdb-media-wrapper";
+
+  mainContent.parentNode.insertBefore(wrapper, mainContent);
+  wrapper.appendChild(mainContent);
+
+  wrapper.appendChild(elements.mediaBlock);
 
   setupMediaBlock(vid, { cards: cardsMapping }, cardIds, elements, vidRecord);
 }
