@@ -143,6 +143,7 @@ function loadHideNativeSentence() {
 function loadSettings() {
   Promise.all([
     getSetting("jpdbApiKey", ""),
+    getSetting("ankiUrl", "http://localhost:8765"),
     getSetting("autoPlayAudio", false),
     getSetting("mediaBlockSize", "650"),
     getSetting("fetchMediaToBrowser", false),
@@ -150,6 +151,7 @@ function loadSettings() {
   ]).then(
     ([
       jpdbApiKey,
+      ankiUrl,
       autoPlayAudio,
       mediaBlockSize,
       fetchMediaToBrowser,
@@ -159,6 +161,7 @@ function loadSettings() {
         document.getElementById("jpdbApiKey").value = jpdbApiKey;
       }
       // Note: Field values are loaded in loadCardsAndFields after options are populated.
+      document.getElementById("url").value = ankiUrl;
       document.getElementById("autoPlayAudio").checked = autoPlayAudio;
       document.getElementById("fetchMediaToBrowser").checked =
         fetchMediaToBrowser;
@@ -777,6 +780,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- Listeners for saving settings on change ---
   document.getElementById("jpdbApiKey").addEventListener("change", (e) => {
     saveSetting("jpdbApiKey", e.target.value.trim());
+  });
+  document.getElementById("url").addEventListener("change", (e) => {
+    saveSetting("ankiUrl", e.target.value.trim());
   });
   document
     .getElementById("japaneseFieldSelect")
