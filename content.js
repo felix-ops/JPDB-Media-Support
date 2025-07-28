@@ -201,7 +201,7 @@ function injectResponsiveStyles() {
       flex-direction: row; /* Side-by-side on desktop */
       align-items: flex-start;
       width: 100%;
-      gap: 40px; /* Replaces margin-left for better spacing */
+      gap: 0px; /* Replaces margin-left for better spacing */
     }
 
     #jpdb-media-block {
