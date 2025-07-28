@@ -272,7 +272,7 @@ function createMediaBlock() {
     if (audioElem) {
       pauseOtherAudios(audioElem);
       audioElem.currentTime = 0;
-      audioElem.play();
+      audioElem.play().catch(() => {});
     }
   });
 
@@ -814,8 +814,6 @@ async function insertMediaInVocabularyPage() {
 
   if (cardIds.length === 0) return;
 
-  injectResponsiveStyles();
-
   const elements = createMediaBlock();
   const mainContent = await waitForElement(".subsection-meanings");
 
@@ -823,9 +821,8 @@ async function insertMediaInVocabularyPage() {
   wrapper.id = "jpdb-media-wrapper";
 
   mainContent.parentNode.insertBefore(wrapper, mainContent);
-  wrapper.appendChild(mainContent);
-
   wrapper.appendChild(elements.mediaBlock);
+  wrapper.appendChild(mainContent);
 
   setupMediaBlock(vid, { cards: cardsMapping }, cardIds, elements, vidRecord);
 }
