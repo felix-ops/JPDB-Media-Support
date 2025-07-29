@@ -465,36 +465,47 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
       imageURL: imageBlob ? URL.createObjectURL(imageBlob) : null,
       audioURL: audioBlob ? URL.createObjectURL(audioBlob) : null,
     };
+
+    // Auto-display media if this card is currently being viewed
+    if (
+      currentCardIndex < cardIds.length &&
+      cardIds[currentCardIndex] === cardId
+    ) {
+      loadMediaContent(cardId);
+    }
   };
 
   /**
-   * NEW: Pre-loads a window of cards around the current index.
+   * Pre-loads a window of cards around the current index.
    */
   function preloadSurroundingCards(currentIndex) {
-    const PRELOAD_WINDOW = 20;
+    const PRELOAD_WINDOW = 10;
     const totalCards = cardIds.length;
     if (totalCards <= 1) return;
 
-    const cardIdsToPreload = new Set();
+    const cardIdsToPreload = [];
 
-    // Gather IDs for 10 cards forward
+    // Gather IDs alternating between forward and backward cards
     for (let i = 1; i <= PRELOAD_WINDOW; i++) {
+      // Add forward card
       const forwardIndex = (currentIndex + i) % totalCards;
-      cardIdsToPreload.add(cardIds[forwardIndex]);
-    }
+      const forwardCardId = cardIds[forwardIndex];
+      if (forwardCardId && !mediaCache[forwardCardId]) {
+        cardIdsToPreload.push(forwardCardId);
+      }
 
-    // Gather IDs for 10 cards backward
-    for (let i = 1; i <= PRELOAD_WINDOW; i++) {
+      // Add backward card
       const backwardIndex = (currentIndex - i + totalCards) % totalCards;
-      cardIdsToPreload.add(cardIds[backwardIndex]);
+      const backwardCardId = cardIds[backwardIndex];
+      if (backwardCardId && !mediaCache[backwardCardId]) {
+        cardIdsToPreload.push(backwardCardId);
+      }
     }
 
     // Asynchronously process each unique card ID in the preload window
     for (const cardId of cardIdsToPreload) {
-      if (cardId && !mediaCache[cardId]) {
-        // Fire-and-forget the caching process.
-        processAndCacheCard(cardId).catch(console.error);
-      }
+      // Fire-and-forget the caching process.
+      processAndCacheCard(cardId).catch(console.error);
     }
   }
 
@@ -509,10 +520,8 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
     // 2. Fetch media for the current card if it's not already cached
     if (!mediaCache[cardId]) {
       await processAndCacheCard(cardId);
-    }
-
-    // 3. If the user hasn't moved on, display the media for the current card
-    if (currentCardIndex === index) {
+    } else {
+      // 3. If media is already cached, display it immediately
       loadMediaContent(cardId);
     }
 
