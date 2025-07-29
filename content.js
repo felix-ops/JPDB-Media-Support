@@ -347,7 +347,7 @@ function createMediaBlock() {
   const favoriteButton = document.createElement("button");
   favoriteButton.id = "jpdb-favorite-button";
   favoriteButton.innerHTML = "☆"; // Empty star
-  favoriteButton.title = "Toggle Favorite"; // Add shortcut hint
+  // favoriteButton.title = "Toggle Favorite"; // Add shortcut hint
   favoriteButton.style.background = "rgba(0, 0, 0, 0)";
   favoriteButton.style.color = "#bbbbbb";
 
