@@ -191,7 +191,7 @@ function injectResponsiveStyles() {
 
   const style = document.createElement("style");
   style.id = styleId;
-  // Define a breakpoint. 1100px is a good starting point for this layout.
+  // Define a breakpoint. 768px is a good starting point for this layout.
   const breakpoint = "768px";
 
   style.textContent = `
@@ -205,8 +205,7 @@ function injectResponsiveStyles() {
     }
 
     #jpdb-media-block {
-      /* Make the block sticky on desktop for a nice scrolling effect */
-      position: sticky;
+      position: static;
       top: 20px;
     }
 
