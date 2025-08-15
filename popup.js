@@ -726,6 +726,11 @@ async function fetchAndStoreData() {
   existingVids.forEach((dbVid) => {
     finalVidsMap.set(dbVid.vid, new Set(dbVid.cards));
   });
+  // Preserve existing favorites per vid so bulkPut doesn't drop them
+  const favCardsByVid = new Map();
+  existingVids.forEach((dbVid) => {
+    favCardsByVid.set(dbVid.vid, dbVid.favCards || []);
+  });
   for (const vid in vidsToUpdate) {
     if (!finalVidsMap.has(vid)) {
       finalVidsMap.set(vid, new Set());
@@ -735,7 +740,12 @@ async function fetchAndStoreData() {
   }
 
   const finalVidsArray = Array.from(finalVidsMap.entries()).map(
-    ([vid, cardIdSet]) => ({ vid, cards: Array.from(cardIdSet) })
+    ([vid, cardIdSet]) => ({
+      vid,
+      cards: Array.from(cardIdSet),
+      // Preserve existing favorites; initialize empty array for brand-new vids
+      favCards: favCardsByVid.get(vid) || [],
+    })
   );
 
   await db.transaction("rw", db.cards, db.media, db.vids, async () => {
