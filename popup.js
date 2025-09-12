@@ -340,13 +340,7 @@ function extractImageFilenameUsingDOMParser(imageHTML) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(imageHTML, "text/html");
   const img = doc.querySelector("img");
-  let filename = img ? img.getAttribute("src") : imageHTML;
-  // Split on "/" to handle paths correctly and encode each segment
-  filename = filename
-    .split("/")
-    .map((segment) => encodeURIComponent(decodeURIComponent(segment)))
-    .join("/");
-  return filename;
+  return img ? img.getAttribute("src") : imageHTML;
 }
 
 function extractAudioFilename(audioText) {
