@@ -1,5 +1,5 @@
-// If you're not using a bundler, ensure Dexie is loaded.
-importScripts("dexie.js");
+// If you're not using a bundler, ensure Dexie and sync-utils are loaded.
+importScripts("dexie.js", "sync-utils.js");
 
 // Initialize Dexie DB with the NEW, EFFICIENT SCHEMA
 const db = new Dexie("JPDBMediaSupportDB");
@@ -20,6 +20,48 @@ function blobToBase64(blob) {
     };
     reader.readAsDataURL(blob);
   });
+}
+
+// Auto-sync function for background script
+async function performAutoSync(params) {
+  const {
+    deckName,
+    ankiUrl,
+    jpdbApiKey,
+    japaneseField,
+    englishField,
+    imageField,
+    audioField,
+    shouldFetchMedia,
+  } = params;
+
+  try {
+    // Fetch Anki cards
+    const ankiCards = await fetchAnkiCards(deckName, ankiUrl);
+    if (ankiCards.length === 0) {
+      return { success: false, error: "No cards found in the selected deck" };
+    }
+
+    // Perform sync using the common sync function
+    const result = await performSync({
+      japaneseField,
+      englishField,
+      imageField,
+      audioField,
+      deckName,
+      ankiUrl,
+      jpdbApiKey,
+      shouldFetchMedia,
+      ankiCards,
+      onProgress: () => {}, // No progress updates needed for background sync
+      onStatusUpdate: () => {}, // No status updates needed for background sync
+    });
+
+    return { success: true, result };
+  } catch (error) {
+    console.error("Auto-sync error:", error);
+    return { success: false, error: error.message };
+  }
 }
 
 // Listen for messages from content and popup scripts.
@@ -56,6 +98,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try {
         const item = await db.settings.get(message.key);
         sendResponse({ value: item ? item.value : undefined });
+      } catch (error) {
+        sendResponse({ success: false, error: error.message });
+      }
+    }
+
+    // Action: saveSetting (for sync-utils.js compatibility)
+    else if (message.action === "saveSetting") {
+      try {
+        await db.settings.put({ key: message.key, value: message.value });
+        sendResponse({ success: true });
       } catch (error) {
         sendResponse({ success: false, error: error.message });
       }
@@ -170,6 +222,91 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           await db.media.clear();
         });
         sendResponse({ success: true });
+      } catch (error) {
+        sendResponse({ success: false, error: error.message });
+      }
+    }
+
+    // *** NEW: Action to perform auto-sync ***
+    else if (message.action === "performAutoSync") {
+      try {
+        const {
+          deckName,
+          ankiUrl,
+          jpdbApiKey,
+          japaneseField,
+          englishField,
+          imageField,
+          audioField,
+          shouldFetchMedia,
+        } = message.params;
+
+        if (!deckName || !ankiUrl || !jpdbApiKey || !japaneseField) {
+          sendResponse({
+            success: false,
+            error: "Missing required parameters for auto-sync",
+          });
+          return;
+        }
+
+        // Import the sync utilities (they should be available in the background context)
+        const result = await performAutoSync({
+          deckName,
+          ankiUrl,
+          jpdbApiKey,
+          japaneseField,
+          englishField,
+          imageField,
+          audioField,
+          shouldFetchMedia,
+        });
+
+        sendResponse({ success: true, result });
+      } catch (error) {
+        sendResponse({ success: false, error: error.message });
+      }
+    }
+
+    // *** NEW: Action to get all settings needed for auto-sync ***
+    else if (message.action === "getAutoSyncSettings") {
+      try {
+        const settings = await Promise.all([
+          db.settings.get("selectedDeck"),
+          db.settings.get("ankiUrl"),
+          db.settings.get("jpdbApiKey"),
+          db.settings.get("selectedJapaneseField"),
+          db.settings.get("selectedEnglishField"),
+          db.settings.get("selectedImageField"),
+          db.settings.get("selectedAudioField"),
+          db.settings.get("fetchMediaToBrowser"),
+          db.settings.get("autoSync"),
+        ]);
+
+        const [
+          selectedDeck,
+          ankiUrl,
+          jpdbApiKey,
+          japaneseField,
+          englishField,
+          imageField,
+          audioField,
+          fetchMediaToBrowser,
+          autoSync,
+        ] = settings;
+
+        const result = {
+          deckName: selectedDeck?.value || "",
+          ankiUrl: ankiUrl?.value || "http://localhost:8765",
+          jpdbApiKey: jpdbApiKey?.value || "",
+          japaneseField: japaneseField?.value || "",
+          englishField: englishField?.value || "",
+          imageField: imageField?.value || "",
+          audioField: audioField?.value || "",
+          shouldFetchMedia: fetchMediaToBrowser?.value || false,
+          autoSyncEnabled: autoSync?.value || false,
+        };
+
+        sendResponse({ success: true, result });
       } catch (error) {
         sendResponse({ success: false, error: error.message });
       }

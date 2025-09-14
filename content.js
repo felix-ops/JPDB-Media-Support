@@ -870,8 +870,76 @@ function initIfEnabled() {
       if (existingBlock) existingBlock.remove();
       return;
     }
+
+    // Check if auto-sync is enabled and trigger it
+    checkAndTriggerAutoSync();
+
     init();
   });
+}
+
+// Auto-sync functionality
+let autoSyncCooldown = false;
+const AUTO_SYNC_COOLDOWN_TIME = 30000; // 30 seconds
+
+async function checkAndTriggerAutoSync() {
+  if (autoSyncCooldown) return;
+
+  try {
+    const autoSyncEnabled = await getSetting("autoSync", false);
+    if (!autoSyncEnabled) return;
+
+    // Get auto-sync settings from background script
+    const response = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ action: "getAutoSyncSettings" }, resolve);
+    });
+
+    if (!response || !response.success || !response.result) return;
+
+    const settings = response.result;
+
+    // Validate required settings
+    if (
+      !settings.autoSyncEnabled ||
+      !settings.deckName ||
+      !settings.jpdbApiKey ||
+      !settings.japaneseField
+    ) {
+      return;
+    }
+
+    // Trigger auto-sync in background
+    chrome.runtime.sendMessage(
+      {
+        action: "performAutoSync",
+        params: {
+          deckName: settings.deckName,
+          ankiUrl: settings.ankiUrl,
+          jpdbApiKey: settings.jpdbApiKey,
+          japaneseField: settings.japaneseField,
+          englishField: settings.englishField,
+          imageField: settings.imageField,
+          audioField: settings.audioField,
+          shouldFetchMedia: settings.shouldFetchMedia,
+        },
+      },
+      (response) => {
+        if (response && response.success) {
+          console.log("Auto-sync completed successfully");
+        } else {
+          console.log("Auto-sync failed:", response?.error);
+        }
+      }
+    );
+
+    // Set cooldown to prevent frequent auto-syncs
+    autoSyncCooldown = true;
+    setTimeout(() => {
+      autoSyncCooldown = false;
+    }, AUTO_SYNC_COOLDOWN_TIME);
+  } catch (error) {
+    console.error("Auto-sync check failed:", error);
+  }
 }
 
 if (document.readyState === "loading") {

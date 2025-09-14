@@ -147,7 +147,7 @@ function loadSettings() {
     getSetting("autoPlayAudio", false),
     getSetting("mediaBlockSize", "650"),
     getSetting("fetchMediaToBrowser", false),
-    // getSetting("autoSync", false) // Load autoSync setting
+    getSetting("autoSync", false), // Load autoSync setting
   ]).then(
     ([
       jpdbApiKey,
@@ -155,7 +155,7 @@ function loadSettings() {
       autoPlayAudio,
       mediaBlockSize,
       fetchMediaToBrowser,
-      // autoSync
+      autoSync,
     ]) => {
       if (jpdbApiKey) {
         document.getElementById("jpdbApiKey").value = jpdbApiKey;
@@ -172,7 +172,7 @@ function loadSettings() {
         mediaBlockSize + "px";
 
       // Load autoSync setting and update the switch.
-      // document.getElementById("autoSync").checked = autoSync;
+      document.getElementById("autoSync").checked = autoSync;
       getSetting("showEnglishSentence", true).then((value) => {
         document.getElementById("showEnglishSentence").checked = !value;
       });
@@ -495,9 +495,8 @@ async function fetchAndStoreData() {
   const resultDiv = document.getElementById("result");
   const progressBar = document.getElementById("progressBar");
   const deckName = document.getElementById("deckSelect").value;
-
-  const deckNameParts = deckName.split("::");
-  const formattedDeckName = deckNameParts[deckNameParts.length - 1];
+  const ankiUrl = document.getElementById("url").value.trim();
+  const jpdbApiKey = document.getElementById("jpdbApiKey").value.trim();
 
   saveSetting("selectedJapaneseField", japaneseField);
   saveSetting("selectedEnglishField", englishField);
@@ -508,9 +507,16 @@ async function fetchAndStoreData() {
     alert("Please select a field for the Japanese sentence.");
     return;
   }
-  const token = document.getElementById("jpdbApiKey").value.trim();
-  if (!token) {
+  if (!jpdbApiKey) {
     alert("Please enter a valid JPDB API key.");
+    return;
+  }
+  if (!ankiUrl) {
+    alert("Please enter a valid Anki Connect URL.");
+    return;
+  }
+  if (!deckName) {
+    alert("Please select a deck.");
     return;
   }
 
@@ -522,238 +528,32 @@ async function fetchAndStoreData() {
   // Get the state of the media fetch toggle
   const shouldFetchMedia = await getSetting("fetchMediaToBrowser", false);
 
-  // ====================================================================
-  // UNIFIED SCANNING PHASE
-  // ====================================================================
+  try {
+    const result = await performSync({
+      japaneseField,
+      englishField,
+      imageField,
+      audioField,
+      deckName,
+      ankiUrl,
+      jpdbApiKey,
+      shouldFetchMedia,
+      ankiCards: window.fetchedCards,
+      onProgress: (progress) => {
+        progressBar.value = progress;
+      },
+      onStatusUpdate: (status) => {
+        resultDiv.innerText = status;
+      },
+    });
 
-  const ankiCards = window.fetchedCards;
-  const [allDbCards, mediaKeys] = await Promise.all([
-    db.cards.toArray(),
-    db.media.toCollection().keys(),
-  ]);
-
-  const allDbCardsMap = new Map(allDbCards.map((c) => [c.cardId, c]));
-  const mediaIdSet = new Set(mediaKeys);
-  const ankiCardIds = new Set(ankiCards.map((c) => c.cardId));
-
-  const deckCardsToProcess = [];
-  const globalCardsToFix = [];
-
-  // --- Check current deck for text/file changes or missing media data ---
-  for (const ankiCard of ankiCards) {
-    const storedCard = allDbCardsMap.get(ankiCard.cardId);
-    const newJapaneseText = stripJapaneseHtml(
-      ankiCard.fields[japaneseField].value.trim()
-    );
-    const newEnglishText = englishField
-      ? stripEnglishHtml(ankiCard.fields[englishField].value.trim())
-      : "";
-    const newImageFile = imageField
-      ? extractImageFilenameUsingDOMParser(
-          ankiCard.fields[imageField].value.trim()
-        )
-      : "";
-    const newAudioFile = audioField
-      ? extractAudioFilename(ankiCard.fields[audioField].value.trim())
-      : "";
-
-    // A card needs its media data if the toggle is on, it has media, and it's not in the DB
-    const needsMediaData =
-      shouldFetchMedia &&
-      (newImageFile || newAudioFile) &&
-      !mediaIdSet.has(ankiCard.cardId);
-
-    if (
-      !storedCard ||
-      storedCard.japaneseContext !== newJapaneseText ||
-      storedCard.englishContext !== newEnglishText ||
-      storedCard.image !== newImageFile ||
-      storedCard.audio !== newAudioFile ||
-      needsMediaData
-    ) {
-      deckCardsToProcess.push({
-        ankiCard,
-        newJapaneseText,
-        newEnglishText,
-        newImageFile,
-        newAudioFile,
-      });
-    }
-  }
-
-  // --- Check the rest of the DB *only* for missing media data ---
-  // This only runs if the user wants to fetch media
-  if (shouldFetchMedia) {
-    for (const storedCard of allDbCards) {
-      if (ankiCardIds.has(storedCard.cardId)) continue;
-      const needsMedia =
-        (storedCard.image || storedCard.audio) &&
-        !mediaIdSet.has(storedCard.cardId);
-      if (needsMedia) {
-        globalCardsToFix.push(storedCard);
-      }
-    }
-  }
-
-  if (deckCardsToProcess.length === 0 && globalCardsToFix.length === 0) {
     progressBar.style.display = "none";
-    resultDiv.innerText = "Everything is already up-to-date!";
-    return;
+    updateCardCount();
+  } catch (error) {
+    progressBar.style.display = "none";
+    resultDiv.innerText = `Error: ${error.message}`;
+    console.error("Sync error:", error);
   }
-
-  // ====================================================================
-  // CONSOLIDATED PROCESSING PHASE
-  // ====================================================================
-  resultDiv.innerText = `Updating ${
-    deckCardsToProcess.length + globalCardsToFix.length
-  } cards... `;
-
-  const textsToParse = deckCardsToProcess.map((c) => c.newJapaneseText);
-  const filenamesToFetch = new Set();
-
-  // Only populate the list of files to fetch if the toggle is enabled
-  if (shouldFetchMedia) {
-    deckCardsToProcess.forEach((c) => {
-      if (c.newImageFile) filenamesToFetch.add(c.newImageFile);
-      if (c.newAudioFile) filenamesToFetch.add(c.newAudioFile);
-    });
-    globalCardsToFix.forEach((c) => {
-      if (c.image) filenamesToFetch.add(c.image);
-      if (c.audio) filenamesToFetch.add(c.audio);
-    });
-  }
-
-  let vidsForDeckCards = [];
-  if (textsToParse.length > 0) {
-    const textChunks = chunkArray(textsToParse, 100);
-    for (let i = 0; i < textChunks.length; i++) {
-      const jpdbData = await getVidsFromContext(textChunks[i]);
-      vidsForDeckCards.push(...(jpdbData?.vidsForCards || []));
-
-      progressBar.value =
-        0 +
-        Math.round(
-          ((i + 1) / textChunks.length) * (shouldFetchMedia ? 40 : 100)
-        );
-    }
-  } else {
-    progressBar.value = shouldFetchMedia ? 40 : 100;
-  }
-
-  let allFetchedMedia = {};
-  if (filenamesToFetch.size > 0) {
-    const filenameChunks = chunkArray(Array.from(filenamesToFetch), 500);
-    for (let i = 0; i < filenameChunks.length; i++) {
-      allFetchedMedia = {
-        ...allFetchedMedia,
-        ...(await retrieveMediaFilesInBatch(filenameChunks[i])),
-      };
-      progressBar.value =
-        40 + Math.round(((i + 1) / filenameChunks.length) * 60);
-    }
-  }
-
-  const cardsToStore = [];
-  const mediaToStore = [];
-  const vidsToUpdate = {};
-
-  for (let i = 0; i < deckCardsToProcess.length; i++) {
-    const c = deckCardsToProcess[i];
-    cardsToStore.push({
-      cardId: c.ankiCard.cardId,
-      deckName: formattedDeckName,
-      japaneseContext: c.newJapaneseText,
-      englishContext: c.newEnglishText,
-      image: c.newImageFile,
-      audio: c.newAudioFile,
-      vids: vidsForDeckCards[i] || [],
-    });
-    if (c.newImageFile || c.newAudioFile) {
-      const imageBase64 = allFetchedMedia[c.newImageFile] || null;
-      const audioBase64 = allFetchedMedia[c.newAudioFile] || null;
-
-      if (imageBase64 || audioBase64) {
-        mediaToStore.push({
-          cardId: c.ankiCard.cardId,
-          mediaData: {
-            image: imageBase64
-              ? base64ToBlob(imageBase64, getMimeType(c.newImageFile))
-              : null,
-            audio: audioBase64
-              ? base64ToBlob(audioBase64, getMimeType(c.newAudioFile))
-              : null,
-          },
-        });
-      }
-    }
-    for (const vid of vidsForDeckCards[i] || []) {
-      if (!vidsToUpdate[vid]) vidsToUpdate[vid] = new Set();
-      vidsToUpdate[vid].add(c.ankiCard.cardId);
-    }
-  }
-
-  // `globalCardsToFix` will only have items if `shouldFetchMedia` is true
-  for (const card of globalCardsToFix) {
-    const imageBase64 = allFetchedMedia[card.image] || null;
-    const audioBase64 = allFetchedMedia[card.audio] || null;
-    if (imageBase64 || audioBase64) {
-      mediaToStore.push({
-        cardId: card.cardId,
-        mediaData: {
-          image: imageBase64
-            ? base64ToBlob(imageBase64, getMimeType(card.image))
-            : null,
-          audio: audioBase64
-            ? base64ToBlob(audioBase64, getMimeType(card.audio))
-            : null,
-        },
-      });
-    }
-  }
-
-  const allAffectedVids = Object.keys(vidsToUpdate);
-  const existingVids = await db.vids
-    .where("vid")
-    .anyOf(allAffectedVids)
-    .toArray();
-  const finalVidsMap = new Map();
-  existingVids.forEach((dbVid) => {
-    finalVidsMap.set(dbVid.vid, new Set(dbVid.cards));
-  });
-  // Preserve existing favorites per vid so bulkPut doesn't drop them
-  const favCardsByVid = new Map();
-  existingVids.forEach((dbVid) => {
-    favCardsByVid.set(dbVid.vid, dbVid.favCards || []);
-  });
-  for (const vid in vidsToUpdate) {
-    if (!finalVidsMap.has(vid)) {
-      finalVidsMap.set(vid, new Set());
-    }
-    const cardSet = finalVidsMap.get(vid);
-    vidsToUpdate[vid].forEach((cardId) => cardSet.add(cardId));
-  }
-
-  const finalVidsArray = Array.from(finalVidsMap.entries()).map(
-    ([vid, cardIdSet]) => ({
-      vid,
-      cards: Array.from(cardIdSet),
-      // Preserve existing favorites; initialize empty array for brand-new vids
-      favCards: favCardsByVid.get(vid) || [],
-    })
-  );
-
-  await db.transaction("rw", db.cards, db.media, db.vids, async () => {
-    if (cardsToStore.length > 0) await db.cards.bulkPut(cardsToStore);
-    if (mediaToStore.length > 0) await db.media.bulkPut(mediaToStore);
-    if (finalVidsArray.length > 0) await db.vids.bulkPut(finalVidsArray);
-  });
-
-  progressBar.style.display = "none";
-  let finalMessage = `Sync complete: ${
-    deckCardsToProcess.length + globalCardsToFix.length
-  } cards were added.`;
-  resultDiv.innerText = finalMessage;
-  updateCardCount();
 }
 
 // ------------------------------
@@ -874,6 +674,9 @@ document.addEventListener("DOMContentLoaded", () => {
     .addEventListener("change", (e) => {
       saveSetting("showEnglishSentence", !e.target.checked);
     });
+  document.getElementById("autoSync").addEventListener("change", (e) => {
+    saveSetting("autoSync", e.target.checked);
+  });
 
   const githubButton = document.getElementById("githubButton");
   if (githubButton) {

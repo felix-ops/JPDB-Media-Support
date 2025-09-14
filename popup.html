@@ -381,15 +381,6 @@
         </select>
       </div>
 
-      <!-- Auto Sync with Anki Switch -->
-      <!-- <div class="form-group switch-container">
-  <span class="switch-label">Auto Sync with Anki</span>
-  <label class="switch">
-    <input type="checkbox" id="autoSync">
-    <span class="slider"></span>
-  </label>
-</div> -->
-
       <div
         id="totalCardCount"
         style="
@@ -435,9 +426,20 @@
         </label>
       </div>
 
+      <!-- Auto Sync with Anki Switch -->
+      <div class="form-group switch-container">
+        <span class="switch-label">Automatically Fetch Data From Anki</span>
+        <label class="switch">
+          <input type="checkbox" id="autoSync" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
       <!-- Fetch Media Files Switch -->
       <div class="form-group switch-container">
-        <span class="switch-label">Store Media Files on Browser</span>
+        <span class="switch-label"
+          >Store Media Files on Browser (Experimental)</span
+        >
         <label class="switch">
           <input type="checkbox" id="fetchMediaToBrowser" checked />
           <span class="slider"></span>
@@ -485,6 +487,7 @@
       <button id="deleteData">Delete All Cards</button>
     </div>
     <script src="dexie.js"></script>
+    <script src="sync-utils.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>
