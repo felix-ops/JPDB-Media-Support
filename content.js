@@ -699,6 +699,21 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
         event.preventDefault();
         elements.favoriteButton.click();
       }
+      if (event.key === "a" || event.key === "A") {
+        const activeElem = document.activeElement;
+        const tagName = activeElem.tagName.toLowerCase();
+        if (
+          tagName === "textarea" ||
+          (tagName === "input" &&
+            /text|email|password|search|url/.test(activeElem.type))
+        ) {
+          return;
+        }
+        event.preventDefault();
+        pauseOtherAudios(elements.audioElem);
+        elements.audioElem.currentTime = 0;
+        elements.audioElem.play().catch(() => {});
+      }
     }
   });
 
