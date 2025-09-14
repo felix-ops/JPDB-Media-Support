@@ -29,6 +29,17 @@ https://github.com/user-attachments/assets/015ffdb5-ca37-458b-8345-2e13f8a0863a
 - With this extension, media is automatically injected into **JPDB vocabulary and review pages**.
 - **Auto-sync functionality** that automatically syncs with Anki when visiting JPDB pages (when enabled).
 
+## ⌨️ Keyboard Shortcuts
+
+The extension provides convenient keyboard shortcuts for quick navigation and interaction with your vocabulary cards. These shortcuts are only active when the JPDB media block is visible on the page.
+
+| Shortcut          | Action          | Description                                    |
+| ----------------- | --------------- | ---------------------------------------------- |
+| `←` (Left Arrow)  | Previous Card   | Navigate to the previous vocabulary card       |
+| `→` (Right Arrow) | Next Card       | Navigate to the next vocabulary card           |
+| `F`               | Toggle Favorite | Mark/unmark the current card as a favorite     |
+| `A`               | Play Audio      | Play the audio for the current vocabulary card |
+
 ## Requirements
 
 To start using this extension, make sure you have the following:
@@ -66,19 +77,9 @@ To start using this extension, make sure you have the following:
 - Set the **Anki Connect URL** (default: `http://localhost:8765`).
 - Choose the **Anki Deck** which contains the cards to fetch media from.
 - In the **Japanese Sentence Field** choose the field which contains the japanese sentence and in the **Translated Sentence Field** choose the field which contains English / any other explanation sentence.
-- Enable/disable **Auto Play Audio**, **Hide Native Sentence**, and **Auto Sync with Anki** as needed.
-- Hit **Fetch Data From Anki** to manually sync all the data from the anki cards.
-- Click **Export Config** to store your settings.
-
-### Auto-Sync Feature
-
-The extension now includes an auto-sync feature that automatically synchronizes with your Anki deck when you visit JPDB pages:
-
-- Enable **Auto Sync with Anki** in the extension settings
-- When you visit JPDB review or vocabulary pages, the extension will automatically check for updates in your Anki deck
-- Auto-sync runs in the background and doesn't require the popup to be open
-- A 30-second cooldown prevents excessive syncing
-- Auto-sync only runs if all required settings are properly configured
+- Enable/disable **Auto Play Audio** and **Hide Native Sentence** as needed.
+- Hit **Fetch Data with Anki** to sync all the data from the anki cards.
+- Click **Export Config** to get backup for settings and cards.
 
 ## How It Works
 
