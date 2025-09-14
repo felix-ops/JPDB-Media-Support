@@ -28,6 +28,17 @@ https://github.com/user-attachments/assets/015ffdb5-ca37-458b-8345-2e13f8a0863a
 - Automatic filtering and categorizing of media **based on the vocabulary present in the sentence**.
 - With this extension, media is automatically injected into **JPDB vocabulary and review pages**.
 
+## ⌨️ Keyboard Shortcuts
+
+The extension provides convenient keyboard shortcuts for quick navigation and interaction with your vocabulary cards. These shortcuts are only active when the JPDB media block is visible on the page.
+
+| Shortcut          | Action          | Description                                    |
+| ----------------- | --------------- | ---------------------------------------------- |
+| `←` (Left Arrow)  | Previous Card   | Navigate to the previous vocabulary card       |
+| `→` (Right Arrow) | Next Card       | Navigate to the next vocabulary card           |
+| `F`               | Toggle Favorite | Mark/unmark the current card as a favorite     |
+| `A`               | Play Audio      | Play the audio for the current vocabulary card |
+
 ## Requirements
 
 To start using this extension, make sure you have the following:
