@@ -78,7 +78,7 @@ To start using this extension, make sure you have the following:
 - In the **Japanese Sentence Field** choose the field which contains the japanese sentence and in the **Translated Sentence Field** choose the field which contains English / any other explanation sentence.
 - Enable/disable **Auto Play Audio** and **Hide Native Sentence** as needed.
 - Hit **Sync Data with Anki** to fetch all the data from the anki cards.
-- Click **Save Config** to store your settings.
+- Click **Export Config** to get backup for settings and cards.
 
 ## How It Works
 
