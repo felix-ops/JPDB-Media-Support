@@ -275,7 +275,7 @@ function createMediaBlock() {
     }
   });
 
-  // --- NEW: Create the Deck Name Element ---
+  //  Create the Deck Name Element ---
   const deckNameElem = document.createElement("div");
   deckNameElem.id = "jpdb-deck-name";
   deckNameElem.style.position = "absolute";

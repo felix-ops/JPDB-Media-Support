@@ -10,7 +10,7 @@ db.version(2).stores({
   settings: "key",
 });
 
-// --- NEW: Helper function to convert a Blob to a Base64 string ---
+//  Helper function to convert a Blob to a Base64 string ---
 function blobToBase64(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
