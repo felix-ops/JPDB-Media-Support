@@ -520,7 +520,7 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
     if (!mediaCache[cardId]) {
       await processAndCacheCard(cardId);
     } else {
-      // 3. If media is already cached, display it immediately
+    // 3. If media is already cached, display it immediately
       loadMediaContent(cardId);
     }
 
@@ -637,7 +637,7 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
     });
   }
 
-  // --- Event Listeners (No changes needed here) ---
+  // --- Event Listeners ---
   elements.favoriteButton.addEventListener("click", () => {
     const currentCardId = cardIds[currentCardIndex];
     if (!currentCardId) return;
@@ -923,13 +923,7 @@ async function checkAndTriggerAutoSync() {
           shouldFetchMedia: settings.shouldFetchMedia,
         },
       },
-      (response) => {
-        if (response && response.success) {
-          console.log("Auto-sync completed successfully");
-        } else {
-          console.log("Auto-sync failed:", response?.error);
-        }
-      }
+      (response) => {}
     );
 
     // Set cooldown to prevent frequent auto-syncs

@@ -1,7 +1,6 @@
-// If you're not using a bundler, ensure Dexie and sync-utils are loaded.
 importScripts("dexie.js", "sync-utils.js");
 
-// Initialize Dexie DB with the NEW, EFFICIENT SCHEMA
+// Initialize Dexie DB
 const db = new Dexie("JPDBMediaSupportDB");
 db.version(2).stores({
   cards: "cardId", // Lightweight metadata table
@@ -68,7 +67,7 @@ async function performAutoSync(params) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Use an IIFE to handle async logic and `sendResponse` correctly.
   (async () => {
-    // Action: fetchMediaFile (no change)
+    // Action: fetchMediaFile
     if (message.action === "fetchMediaFile") {
       const ankiUrl = message.ankiUrl || "http://localhost:8765";
       const filename = message.filename;
@@ -93,7 +92,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
 
-    // Action: getSetting (no change)
+    // Action: getSetting
     else if (message.action === "getSetting") {
       try {
         const item = await db.settings.get(message.key);
@@ -113,7 +112,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
 
-    // Action: getVidRecord (no change)
+    // Action: getVidRecord
     else if (message.action === "getVidRecord") {
       try {
         const result = await db.vids.get(message.vid);
@@ -123,7 +122,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
 
-    // *** NEW: Action to toggle a card's favorite status ***
+    //  Action to toggle a card's favorite status 
     else if (message.action === "toggleFavoriteCard") {
       try {
         const { vid, cardId } = message;
@@ -158,7 +157,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
 
-    // *** UPDATED: getCardsMapping now ONLY sends lightweight card metadata ***
+    //  getCardsMapping, sends lightweight card metadata 
     else if (message.action === "getCardsMapping") {
       try {
         const cardsArray = await db.cards.bulkGet(message.cardIds);
@@ -174,7 +173,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
 
-    // *** NEW: Action to get media data for a SINGLE card ***
+    //  Action to get media data for a SINGLE card 
     else if (message.action === "getMediaForCard") {
       try {
         const cardId = message.cardId;
@@ -197,7 +196,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
 
-    // *** clears all Card Data
+    //  clears all Card Data
     else if (message.action === "clearAllCards") {
       try {
         // Perform all clear operations within a single transaction
@@ -214,7 +213,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
 
-    // *** clears all Media Blobs
+    // clears all Media Blobs
     else if (message.action === "clearAllMedia") {
       try {
         // Perform all clear operations within a single transaction
@@ -227,7 +226,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
 
-    // *** NEW: Action to perform auto-sync ***
+    // Action to perform auto-sync 
     else if (message.action === "performAutoSync") {
       try {
         const {
@@ -267,7 +266,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
 
-    // *** NEW: Action to get all settings needed for auto-sync ***
+    // Action to get all settings needed for auto-sync 
     else if (message.action === "getAutoSyncSettings") {
       try {
         const settings = await Promise.all([
@@ -312,7 +311,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
 
-    // *** Restores from Config file
+    //  Restores from Config file
     else if (message.action === "restoreFromConfig") {
       const configData = message.data;
       if (!configData) {
