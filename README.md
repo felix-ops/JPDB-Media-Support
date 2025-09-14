@@ -6,7 +6,7 @@ This extension designed for **JPDB** users who want to enhance their learning ex
 This extension enables users to fetch media from existing **Anki** decks and displays them during reviews. You can create custom Anki cards with Images and audio using tools like **[asbplayer](https://github.com/killergerbah/asbplayer)** or **[subs2srs](https://subs2srs.sourceforge.net/)**, then sync the media from those decks to use within JPDB using this extension.
 
 ## Review Page
-
+ 
 ![image](https://github.com/user-attachments/assets/59a3bb4b-3056-4379-9f46-974e79fefdab)
 
 ## Vocabulary Page
