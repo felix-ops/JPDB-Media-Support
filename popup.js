@@ -148,10 +148,10 @@ function loadSettings() {
     getSetting("fetchMediaToBrowser", false),
     getSetting("autoSync", false), // Load autoSync setting
     // Front settings
-    getSetting("showImageOnFront", true),
+    getSetting("showImageOnFront", false),
     getSetting("showSentenceOnFront", false),
     getSetting("autoPlayFront", false),
-    getSetting("hideNativeSentenceFront", true),
+    getSetting("hideNativeSentenceFront", false),
   ]).then(
     ([
       jpdbApiKey,

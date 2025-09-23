@@ -2,7 +2,7 @@
   "name": "JPDB Media Support",
   "short_name": "JPDB Media Support",
   "description": "Imports Media from Anki deck",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "manifest_version": 3,
   "icons": {
     "128": "icon.png"

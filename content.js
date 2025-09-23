@@ -190,7 +190,7 @@ function removeExistingContent({ isFrontPage }) {
   const settingKey = isFrontPage
     ? "hideNativeSentenceFront"
     : "hideNativeSentence";
-  getSetting(settingKey, true).then((hide) => {
+  getSetting(settingKey, false).then((hide) => {
     if (hide !== false) {
       const existingCardSentence = document.querySelector(
         ".card-sentence:not(.jpdb-inserted)"
@@ -672,7 +672,7 @@ async function setupMediaBlock(
     audioElem.src = cachedMedia.audioURL || "";
     elements.imgElem.src = cachedMedia.imageURL || "";
     if (isFrontPage) {
-      getSetting("showImageOnFront", true).then((showImg) => {
+      getSetting("showImageOnFront", false).then((showImg) => {
         elements.imgElem.style.display =
           showImg && cachedMedia.imageURL ? "block" : "none";
       });
@@ -862,7 +862,7 @@ async function insertMediaInReview() {
   if (isFrontPage) {
     // Check settings BEFORE creating/inserting any DOM to avoid flicker
     const [showImg, showSentence] = await Promise.all([
-      getSetting("showImageOnFront", true),
+      getSetting("showImageOnFront", false),
       getSetting("showSentenceOnFront", false),
     ]);
     if (!showImg && !showSentence) {
