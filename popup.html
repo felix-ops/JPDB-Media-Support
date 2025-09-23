@@ -398,6 +398,19 @@
 
       <button id="fetchData">Fetch Data From Anki</button>
       <div id="result"></div>
+      <!-- Back Page Settings -->
+      <div
+        class="form-group"
+        style="
+          margin-top: 15px;
+          color: #cccccc;
+          font-weight: bold;
+          border-bottom: 1px solid #cccccc;
+          padding-bottom: 5px;
+        "
+      >
+        Back Page Customization:
+      </div>
 
       <!-- Auto Play Audio Switch -->
       <div class="form-group switch-container">
@@ -426,6 +439,65 @@
         </label>
       </div>
 
+      <!-- Front Page Settings -->
+      <div
+        class="form-group"
+        style="
+          margin-top: 15px;
+          color: #cccccc;
+          font-weight: bold;
+          border-bottom: 1px solid #cccccc;
+          padding-bottom: 5px;
+        "
+      >
+        Front Page Customization:
+      </div>
+
+      <div class="form-group switch-container" id="autoPlayFrontRow">
+        <span class="switch-label">Auto Play Audio</span>
+        <label class="switch">
+          <input type="checkbox" id="autoPlayFront" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="form-group switch-container">
+        <span class="switch-label">Show Image</span>
+        <label class="switch">
+          <input type="checkbox" id="showImageOnFront" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="form-group switch-container">
+        <span class="switch-label">Show Sentence</span>
+        <label class="switch">
+          <input type="checkbox" id="showSentenceOnFront" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="form-group switch-container">
+        <span class="switch-label">Hide JPDB's Sentence Block</span>
+        <label class="switch">
+          <input type="checkbox" id="hideNativeSentenceFront" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- Other Page Settings -->
+      <div
+        class="form-group"
+        style="
+          margin-top: 15px;
+          color: #cccccc;
+          font-weight: bold;
+          border-bottom: 1px solid #cccccc;
+          padding-bottom: 5px;
+        "
+      >
+        Other Page Settings
+      </div>
       <!-- Auto Sync with Anki Switch -->
       <div class="form-group switch-container">
         <span class="switch-label">Automatically Fetch Data From Anki</span>
@@ -485,6 +557,10 @@
       <!-- GitHub Page Button (Button only, no inline JS) -->
       <button id="githubButton">Visit GitHub Page for More Info...</button>
       <button id="deleteData">Delete All Cards</button>
+      <div
+        id="extensionVersion"
+        style="text-align: center; color: #888888; font-size: 12px"
+      ></div>
     </div>
     <script src="dexie.js"></script>
     <script src="sync-utils.js"></script>

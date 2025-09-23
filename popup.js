@@ -147,6 +147,11 @@ function loadSettings() {
     getSetting("mediaBlockSize", "650"),
     getSetting("fetchMediaToBrowser", false),
     getSetting("autoSync", false), // Load autoSync setting
+    // Front settings
+    getSetting("showImageOnFront", true),
+    getSetting("showSentenceOnFront", false),
+    getSetting("autoPlayFront", false),
+    getSetting("hideNativeSentenceFront", true),
   ]).then(
     ([
       jpdbApiKey,
@@ -155,6 +160,10 @@ function loadSettings() {
       mediaBlockSize,
       fetchMediaToBrowser,
       autoSync,
+      showImageOnFront,
+      showSentenceOnFront,
+      autoPlayFront,
+      hideNativeSentenceFront,
     ]) => {
       if (jpdbApiKey) {
         document.getElementById("jpdbApiKey").value = jpdbApiKey;
@@ -172,6 +181,13 @@ function loadSettings() {
 
       // Load autoSync setting and update the switch.
       document.getElementById("autoSync").checked = autoSync;
+      // Front settings
+      document.getElementById("showImageOnFront").checked = showImageOnFront;
+      document.getElementById("showSentenceOnFront").checked =
+        showSentenceOnFront;
+      document.getElementById("autoPlayFront").checked = autoPlayFront;
+      document.getElementById("hideNativeSentenceFront").checked =
+        hideNativeSentenceFront;
       getSetting("showEnglishSentence", true).then((value) => {
         document.getElementById("showEnglishSentence").checked = !value;
       });
@@ -573,6 +589,15 @@ document.addEventListener("DOMContentLoaded", () => {
   loadSettings();
   updateCardCount();
 
+  // Display current extension version below the delete button
+  try {
+    const manifest = chrome.runtime.getManifest();
+    const versionEl = document.getElementById("extensionVersion");
+    if (versionEl && manifest && manifest.version) {
+      versionEl.textContent = `Version ${manifest.version}`;
+    }
+  } catch (e) {}
+
   document
     .getElementById("deckSelect")
     .addEventListener("change", loadCardsAndFields);
@@ -651,6 +676,25 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("autoPlayAudio").addEventListener("change", (e) => {
     saveSetting("autoPlayAudio", e.target.checked);
   });
+  // Front settings listeners
+  document
+    .getElementById("showImageOnFront")
+    .addEventListener("change", (e) => {
+      saveSetting("showImageOnFront", e.target.checked);
+    });
+  document
+    .getElementById("showSentenceOnFront")
+    .addEventListener("change", (e) => {
+      saveSetting("showSentenceOnFront", e.target.checked);
+    });
+  document.getElementById("autoPlayFront").addEventListener("change", (e) => {
+    saveSetting("autoPlayFront", e.target.checked);
+  });
+  document
+    .getElementById("hideNativeSentenceFront")
+    .addEventListener("change", (e) => {
+      saveSetting("hideNativeSentenceFront", e.target.checked);
+    });
   document
     .getElementById("extensionEnabled")
     .addEventListener("change", (e) => {

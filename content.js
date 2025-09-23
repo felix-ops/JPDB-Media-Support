@@ -73,6 +73,37 @@ function extractVidFromReviewUrl() {
       return vid;
     }
   }
+  // Fallback: Parse from front-page DOM when URL lacks c= (front of card)
+  try {
+    // 1) Look for the hidden answer box's vocabulary link
+    const plain = document.querySelector(".answer-box .plain");
+    if (plain) {
+      const link = plain.querySelector('a[href^="/vocabulary/"]');
+      if (link && link.getAttribute("href")) {
+        const m = link.getAttribute("href").match(/\/vocabulary\/(\d+)\//);
+        if (m) return m[1];
+      }
+    }
+    // 2) Some front pages include a prefetch review link with c=...; try extracting from there
+    const prefetch = document.querySelector(
+      'link[rel="prefetch"][href*="/review?"]'
+    );
+    if (prefetch) {
+      const href = prefetch.getAttribute("href");
+      const url = new URL(href, location.origin);
+      const c = url.searchParams.get("c");
+      if (c) {
+        const parts2 = c.split(",");
+        if (parts2.length >= 2) return parts2[1];
+      }
+    }
+    // 3) As a last resort, scan for any anchor matching /vocabulary/{vid}/
+    const anyVocab = document.querySelector('a[href^="/vocabulary/"]');
+    if (anyVocab) {
+      const m2 = anyVocab.getAttribute("href").match(/\/vocabulary\/(\d+)\//);
+      if (m2) return m2[1];
+    }
+  } catch {}
   return null;
 }
 
@@ -154,14 +185,17 @@ async function dataToBlob(data, mimeType) {
   return await response.blob();
 }
 
-function removeExistingContent() {
-  getSetting("hideNativeSentence", true).then((hide) => {
+function removeExistingContent({ isFrontPage }) {
+  // Hide native sentence on back/vocab pages via existing flag; on front page via dedicated flag
+  const settingKey = isFrontPage
+    ? "hideNativeSentenceFront"
+    : "hideNativeSentence";
+  getSetting(settingKey, true).then((hide) => {
     if (hide !== false) {
       const existingCardSentence = document.querySelector(
         ".card-sentence:not(.jpdb-inserted)"
       );
       if (existingCardSentence) {
-        // remove native sentence elements only
         const existingTranslation = existingCardSentence.nextElementSibling;
         if (
           existingTranslation &&
@@ -400,8 +434,16 @@ function createMediaBlock() {
 // ------------------------------
 // Setup Media Block (Navigation, etc.)
 // ------------------------------
-async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
-  removeExistingContent();
+async function setupMediaBlock(
+  vid,
+  jpdbData,
+  cardIds,
+  elements,
+  vidRecord,
+  options = {}
+) {
+  const { isFrontPage = false } = options;
+  removeExistingContent({ isFrontPage });
 
   if (cardIds.length < 2) {
     elements.rightButton.style.color = "grey";
@@ -520,7 +562,7 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
     if (!mediaCache[cardId]) {
       await processAndCacheCard(cardId);
     } else {
-    // 3. If media is already cached, display it immediately
+      // 3. If media is already cached, display it immediately
       loadMediaContent(cardId);
     }
 
@@ -598,8 +640,10 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
 
     getTokensForContext(vid, japaneseText, jpSentence);
 
+    // On front page, translation is always disabled
+    const allowTranslation = isFrontPage ? false : true;
     getSetting("showEnglishSentence", true).then((showEnglish) => {
-      if (showEnglish && englishText) {
+      if (allowTranslation && showEnglish && englishText) {
         const translationContainer = document.createElement("div");
         translationContainer.style.display = "flex";
         translationContainer.style.justifyContent = "center";
@@ -627,13 +671,20 @@ async function setupMediaBlock(vid, jpdbData, cardIds, elements, vidRecord) {
     const audioElem = elements.audioElem;
     audioElem.src = cachedMedia.audioURL || "";
     elements.imgElem.src = cachedMedia.imageURL || "";
-    elements.imgElem.style.display = cachedMedia.imageURL ? "block" : "none";
+    if (isFrontPage) {
+      getSetting("showImageOnFront", true).then((showImg) => {
+        elements.imgElem.style.display =
+          showImg && cachedMedia.imageURL ? "block" : "none";
+      });
+    } else {
+      elements.imgElem.style.display = cachedMedia.imageURL ? "block" : "none";
+    }
 
-    getSetting("autoPlayAudio", false).then((autoPlay) => {
-      if (autoPlay && audioElem.src) {
-        audioElem.currentTime = 0;
-        audioElem.play().catch(() => {});
-      }
+    const autoPlayKey = isFrontPage ? "autoPlayFront" : "autoPlayAudio";
+    getSetting(autoPlayKey, false).then((autoPlay) => {
+      if (!autoPlay || !audioElem.src) return;
+      audioElem.currentTime = 0;
+      audioElem.play().catch(() => {});
     });
   }
 
@@ -805,8 +856,50 @@ async function insertMediaInReview() {
 
   if (cardIds.length === 0) return;
 
-  injectResponsiveStyles();
+  // Decide front/back by presence of c= param; front page has no c
+  const isFrontPage = !new URLSearchParams(window.location.search).has("c");
 
+  if (isFrontPage) {
+    // Check settings BEFORE creating/inserting any DOM to avoid flicker
+    const [showImg, showSentence] = await Promise.all([
+      getSetting("showImageOnFront", true),
+      getSetting("showSentenceOnFront", false),
+    ]);
+    if (!showImg && !showSentence) {
+      // Nothing to render on front page; keep layout untouched
+      return;
+    }
+
+    const elements = createMediaBlock();
+    // Insert outside and directly below the review-hidden container on the front page
+    let anchor = document.querySelector(".review-hidden");
+    if (!anchor) {
+      anchor =
+        document.querySelector(".answer-box") ||
+        document.querySelector(".review-button-group") ||
+        document.querySelector("#a") ||
+        document.body;
+    }
+    if (anchor && anchor.parentNode) {
+      anchor.parentNode.insertBefore(elements.mediaBlock, anchor.nextSibling);
+    }
+
+    if (!showImg) elements.imgElem.style.display = "none";
+    if (!showSentence) elements.contextElem.style.display = "none";
+
+    setupMediaBlock(
+      vid,
+      { cards: cardsMapping },
+      cardIds,
+      elements,
+      vidRecord,
+      { isFrontPage: true }
+    );
+    return;
+  }
+
+  // Back page layout (keep previous wrapper SxS)
+  injectResponsiveStyles();
   const elements = createMediaBlock();
   const mainContent = await waitForElement(".result.vocabulary .vbox.gap");
   document.body.style.maxWidth = "75rem";
@@ -818,7 +911,9 @@ async function insertMediaInReview() {
   mainContent.style.flex = "1";
   wrapper.appendChild(elements.mediaBlock);
 
-  setupMediaBlock(vid, { cards: cardsMapping }, cardIds, elements, vidRecord);
+  setupMediaBlock(vid, { cards: cardsMapping }, cardIds, elements, vidRecord, {
+    isFrontPage: false,
+  });
 }
 
 async function insertMediaInVocabularyPage() {
