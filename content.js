@@ -857,7 +857,7 @@ async function insertMediaInReview() {
   if (cardIds.length === 0) return;
 
   // Decide front/back by presence of c= param; front page has no c
-  const isFrontPage = !new URLSearchParams(window.location.search).has("c");
+  const isFrontPage = !new URLSearchParams(window.location.search).has("c") && !document.querySelector(".subsection-meanings");
 
   if (isFrontPage) {
     // Check settings BEFORE creating/inserting any DOM to avoid flicker
