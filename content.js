@@ -160,6 +160,14 @@ function getMediaForCard(cardId) {
   });
 }
 
+function formatTranslatedText(text) {
+  if (!text) return "";
+  const tempElement = document.createElement("textarea");
+  tempElement.innerHTML = text;
+  let decodedText = tempElement.value;
+  return decodedText.replace(/\s+/g, " ").trim();
+}
+
 async function fetchMediaFile(filename) {
   const ankiUrl = await getAnkiUrl();
   return new Promise((resolve) => {
@@ -597,7 +605,7 @@ async function setupMediaBlock(
     }
 
     const japaneseText = cardData.japaneseContext || "";
-    const englishText = cardData.englishContext || "";
+    const englishText = formatTranslatedText(cardData.englishContext || "");
 
     const jpContainer = document.createElement("div");
     jpContainer.style.display = "flex";
@@ -857,7 +865,9 @@ async function insertMediaInReview() {
   if (cardIds.length === 0) return;
 
   // Decide front/back by presence of c= param; front page has no c
-  const isFrontPage = !new URLSearchParams(window.location.search).has("c") && !document.querySelector(".subsection-meanings");
+  const isFrontPage =
+    !new URLSearchParams(window.location.search).has("c") &&
+    !document.querySelector(".subsection-meanings");
 
   if (isFrontPage) {
     // Check settings BEFORE creating/inserting any DOM to avoid flicker
