@@ -254,7 +254,7 @@ async function performSync(options = {}) {
       ankiCard.fields[japaneseField].value.trim()
     );
     const newEnglishText = englishField
-      ? stripEnglishHtml(ankiCard.fields[englishField].value.trim())
+      ? ankiCard.fields[englishField].value.trim()
       : "";
     const newImageFile = imageField
       ? extractImageFilenameUsingDOMParser(
