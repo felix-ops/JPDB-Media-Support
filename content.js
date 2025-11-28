@@ -162,9 +162,9 @@ function getMediaForCard(cardId) {
 
 function formatTranslatedText(text) {
   if (!text) return "";
-  const tempElement = document.createElement("textarea");
+  const tempElement = document.createElement("div");
   tempElement.innerHTML = text;
-  let decodedText = tempElement.value;
+  let decodedText = tempElement.innerText;
   return decodedText.replace(/\s+/g, " ").trim();
 }
 
