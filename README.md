@@ -1,8 +1,9 @@
 # JPDB Media Support Extension
 
 ## Overview
+This extension is built for JPDB users who miss the Anki's mining workflow but prefer JPDB’s SRS system.
+this extension allows you to import custom images, audio, and sentences from your Anki decks and display them automatically during your JPDB reviews.
 
-This extension designed for **JPDB** users who want to enhance their learning experience by integrating custom images, audio, and sentences into the JPDB platform.
 This extension enables users to fetch media from existing **Anki** decks and displays them during reviews. You can create custom Anki cards with Images and audio using tools like **[asbplayer](https://github.com/killergerbah/asbplayer)** or **[subs2srs](https://subs2srs.sourceforge.net/)**, then sync the media from those decks to use within JPDB using this extension.
 
 ## Review Page
@@ -21,13 +22,15 @@ https://github.com/user-attachments/assets/015ffdb5-ca37-458b-8345-2e13f8a0863a
 
 - If you find it really hassle to mine using asbplayer or subs2srs. There's a awesome collection of anime Anki decks created by "Jo-Mako", import those decks and use them with this extension.
   **[Anki Decks Collection for Anime](https://docs.google.com/spreadsheets/d/1ukDIWSkh_xvpppPbgs1nUR2kaEwFaWlsJgZUlb9LuTs/edit?gid=822742203#gid=822742203)**
+- Checkout **[Immersion kit Examples](https://github.com/AwooDesu/JPDB-Immersion-Kit-Examples?tab=readme-ov-file)** if you don't prefer to mine manually and just need example media and sentences.
 
 ## Features
-
-- Seamless integration of **images, audio, and sentence media** from Anki into JPDB.
-- Automatic filtering and categorizing of media **based on the vocabulary present in the sentence**.
+- **Zero Manual Linking:** You don't need to link cards one by one. The extension parses the Japanese sentence from your Anki card, finds all the words in it, and automatically links the media to those words on JPDB.
+- **Multiple Contexts:** Since words appear in many sentences, you might mine the same word in different scenes. The extension aggregates all of them, letting you cycle through every context where you’ve encountered that word.
 - With this extension, media is automatically injected into **JPDB vocabulary and review pages**.
 - **Auto-sync functionality** that automatically syncs with Anki when visiting JPDB pages (when enabled).
+
+
 
 ## ⌨️ Keyboard Shortcuts
 
