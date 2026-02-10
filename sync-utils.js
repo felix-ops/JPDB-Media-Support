@@ -9,9 +9,9 @@ function getSetting(key, defaultValue) {
         resolve(
           response && response.value !== undefined
             ? response.value
-            : defaultValue
+            : defaultValue,
         );
-      }
+      },
     );
   });
 }
@@ -22,7 +22,7 @@ function saveSetting(key, value) {
       { action: "saveSetting", key: key, value: value },
       (response) => {
         resolve(response && response.success);
-      }
+      },
     );
   });
 }
@@ -69,6 +69,31 @@ function stripEnglishHtml(html) {
   let tempDiv = document.createElement("div");
   tempDiv.innerHTML = html.replace(/<br\s*\/?>/g, " ");
   return tempDiv.innerText;
+}
+
+function normalizeForComparison(text) {
+  if (!text) return "";
+  let normalized = text;
+
+  // 1. Handle explicit &nbsp; and unicode nbsp
+  normalized = normalized.replace(/&nbsp;/gi, " ").replace(/\u00A0/g, " ");
+
+  // 2. Decode common entities ensuring consistency between regex-strip and innerText
+  const replacements = {
+    "&amp;": "&",
+    "&lt;": "<",
+    "&gt;": ">",
+    "&quot;": '"',
+    "&#39;": "'",
+    "&#039;": "'",
+  };
+  normalized = normalized.replace(
+    /&[a-z0-9#]+;/gi,
+    (entity) => replacements[entity] || entity,
+  );
+
+  // 3. Collapse whitespace and trim
+  return normalized.replace(/\s+/g, " ").trim();
 }
 
 function chunkArray(array, chunkSize) {
@@ -251,14 +276,14 @@ async function performSync(options = {}) {
   for (const ankiCard of ankiCards) {
     const storedCard = allDbCardsMap.get(ankiCard.cardId);
     const newJapaneseText = stripJapaneseHtml(
-      ankiCard.fields[japaneseField].value.trim()
+      ankiCard.fields[japaneseField].value.trim(),
     );
     const newEnglishText = englishField
       ? ankiCard.fields[englishField].value.trim()
       : "";
     const newImageFile = imageField
       ? extractImageFilenameUsingDOMParser(
-          ankiCard.fields[imageField].value.trim()
+          ankiCard.fields[imageField].value.trim(),
         )
       : "";
     const newAudioFile = audioField
@@ -273,7 +298,8 @@ async function performSync(options = {}) {
 
     if (
       !storedCard ||
-      storedCard.japaneseContext !== newJapaneseText ||
+      normalizeForComparison(storedCard.japaneseContext) !==
+        normalizeForComparison(newJapaneseText) ||
       storedCard.englishContext !== newEnglishText ||
       storedCard.image !== newImageFile ||
       storedCard.audio !== newAudioFile ||
@@ -341,7 +367,7 @@ async function performSync(options = {}) {
       vidsForDeckCards.push(...(jpdbData?.vidsForCards || []));
 
       const progress = Math.round(
-        ((i + 1) / textChunks.length) * (shouldFetchMedia ? 40 : 100)
+        ((i + 1) / textChunks.length) * (shouldFetchMedia ? 40 : 100),
       );
       onProgress(progress);
     }
@@ -448,7 +474,7 @@ async function performSync(options = {}) {
       cards: Array.from(cardIdSet),
       // Preserve existing favorites; initialize empty array for brand-new vids
       favCards: favCardsByVid.get(vid) || [],
-    })
+    }),
   );
 
   await db.transaction("rw", db.cards, db.media, db.vids, async () => {
