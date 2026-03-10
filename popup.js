@@ -46,6 +46,7 @@ function setupCombobox(selectId) {
       optionElement.textContent = option.text;
       optionElement.dataset.value = option.value;
 
+      // Select option on mouse click (desktop)
       optionElement.addEventListener("mousedown", (e) => {
         e.preventDefault();
         input.value = option.text;
@@ -53,6 +54,17 @@ function setupCombobox(selectId) {
         optionsContainer.style.display = "none";
         selectElement.dispatchEvent(new Event("change"));
       });
+
+      // Select option on tap (mobile/touch) — touchend fires after blur, so
+      // preventDefault() prevents the spurious mousedown that would follow.
+      optionElement.addEventListener("touchend", (e) => {
+        e.preventDefault();
+        input.value = option.text;
+        selectElement.value = option.value;
+        optionsContainer.style.display = "none";
+        selectElement.dispatchEvent(new Event("change"));
+      });
+
       optionsContainer.appendChild(optionElement);
     });
   }
@@ -102,12 +114,26 @@ function setupCombobox(selectId) {
     }
   });
 
+  // Mirror the mousedown toggle for touch devices (mobile).
+  arrow.addEventListener("touchend", (e) => {
+    e.preventDefault(); // Prevent ghost mouse events that follow touch
+    const isVisible = getComputedStyle(optionsContainer).display === "block";
+
+    if (isVisible) {
+      optionsContainer.style.display = "none";
+    } else {
+      input.focus(); // Triggers the focus listener, which handles the rest
+    }
+  });
+
   input.addEventListener("blur", () => {
+    // 300ms gives touchend enough time to fire and set the value before we
+    // collapse the dropdown. 150ms was sufficient for mouse but not for touch.
     setTimeout(() => {
       optionsContainer.style.display = "none";
       // On blur, revert the input to match the actual selected value in the hidden select.
       syncInputToSelect();
-    }, 150);
+    }, 300);
   });
 
   input.addEventListener("input", filterOptions);
@@ -140,7 +166,10 @@ function loadHideNativeSentence() {
 }
 
 function loadSettings() {
-  Promise.all([
+  // Return the Promise so callers can chain .then(fetchDecks) and avoid the
+  // race condition where fetchDecks() reads the URL before IndexedDB has
+  // populated it from the saved custom IP/host.
+  return Promise.all([
     getSetting("jpdbApiKey", ""),
     getSetting("ankiUrl", "http://localhost:8765"),
     getSetting("autoPlayAudio", false),
@@ -193,7 +222,7 @@ function loadSettings() {
       });
       loadExtensionEnabled();
       loadHideNativeSentence();
-    }
+    },
   );
 }
 
@@ -585,8 +614,13 @@ document.addEventListener("DOMContentLoaded", () => {
   ].forEach(setupCombobox);
 
   // --- Primary Listeners ---
-  fetchDecks();
-  loadSettings();
+  // loadSettings() must complete first so the Anki URL field is populated
+  // from IndexedDB before fetchDecks() reads it. Calling them concurrently
+  // caused fetchDecks() to always use the default HTML placeholder value
+  // instead of the user's saved custom IP/host.
+  loadSettings().then(() => {
+    fetchDecks();
+  });
   updateCardCount();
 
   // Display current extension version below the delete button
@@ -649,7 +683,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // If the switch is turned OFF, ask for confirmation before clearing data.
         if (
           confirm(
-            "Disabling this will clear all cached media (images/audio) from the browser to save space. Your card text and settings will be kept. Proceed?"
+            "Disabling this will clear all cached media (images/audio) from the browser to save space. Your card text and settings will be kept. Proceed?",
           )
         ) {
           try {
@@ -660,7 +694,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (response && response.success) {
                   updateCardCount();
                 }
-              }
+              },
             );
           } catch (error) {
             alert("Failed to clear media cache: " + error.message);
@@ -781,10 +815,10 @@ document.addEventListener("DOMContentLoaded", () => {
               } else {
                 alert(
                   "Failed to load configuration: " +
-                    (response?.error || "Unknown error")
+                    (response?.error || "Unknown error"),
                 );
               }
-            }
+            },
           );
         } catch (err) {
           alert("Error parsing configuration file: " + err.message);
@@ -800,7 +834,7 @@ document.addEventListener("DOMContentLoaded", () => {
     .addEventListener("click", async function () {
       if (
         confirm(
-          "'Delete All Cards' will remove all stored cards and favorites from the Extension. It is recommended to back up your data first using 'Export Config' to prevent accidental data loss."
+          "'Delete All Cards' will remove all stored cards and favorites from the Extension. It is recommended to back up your data first using 'Export Config' to prevent accidental data loss.",
         )
       ) {
         try {
@@ -810,7 +844,7 @@ document.addEventListener("DOMContentLoaded", () => {
               if (response && response.success) {
                 updateCardCount();
               }
-            }
+            },
           );
         } catch (error) {
           alert("An error occurred while deleting data.");

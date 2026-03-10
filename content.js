@@ -7,9 +7,9 @@ function getSetting(key, defaultValue) {
         resolve(
           response && response.value !== undefined
             ? response.value
-            : defaultValue
+            : defaultValue,
         );
-      }
+      },
     );
   });
 }
@@ -20,7 +20,7 @@ function getVidRecord(vid) {
       { action: "getVidRecord", vid: vid },
       (response) => {
         resolve(response && response.success ? response.result : null);
-      }
+      },
     );
   });
 }
@@ -31,7 +31,7 @@ function getCardsMapping(cardIds) {
       { action: "getCardsMapping", cardIds: cardIds },
       (response) => {
         resolve(response && response.success ? response.result : {});
-      }
+      },
     );
   });
 }
@@ -86,7 +86,7 @@ function extractVidFromReviewUrl() {
     }
     // 2) Some front pages include a prefetch review link with c=...; try extracting from there
     const prefetch = document.querySelector(
-      'link[rel="prefetch"][href*="/review?"]'
+      'link[rel="prefetch"][href*="/review?"]',
     );
     if (prefetch) {
       const href = prefetch.getAttribute("href");
@@ -155,7 +155,7 @@ function getMediaForCard(cardId) {
       { action: "getMediaForCard", cardId: cardId },
       (response) => {
         resolve(response && response.success ? response.mediaData : null);
-      }
+      },
     );
   });
 }
@@ -179,16 +179,16 @@ async function fetchMediaFile(filename) {
         } else {
           resolve(null);
         }
-      }
+      },
     );
   });
 }
 
-// --- UPDATED: Converts a Data URL (from background.js) or a raw base64 string (from fallback fetch) to a Blob ---
+// Converts a Data URL (from background.js) or a raw base64 string (from fallback fetch) to a Blob
 async function dataToBlob(data, mimeType) {
   // data can be a data URL "data:mime/type;base64,..." or just a base64 string
   const response = await fetch(
-    data.startsWith("data:") ? data : `data:${mimeType};base64,${data}`
+    data.startsWith("data:") ? data : `data:${mimeType};base64,${data}`,
   );
   return await response.blob();
 }
@@ -201,7 +201,7 @@ function removeExistingContent({ isFrontPage }) {
   getSetting(settingKey, false).then((hide) => {
     if (hide !== false) {
       const existingCardSentence = document.querySelector(
-        ".card-sentence:not(.jpdb-inserted)"
+        ".card-sentence:not(.jpdb-inserted)",
       );
       if (existingCardSentence) {
         const existingTranslation = existingCardSentence.nextElementSibling;
@@ -214,7 +214,7 @@ function removeExistingContent({ isFrontPage }) {
         existingCardSentence.remove();
 
         const audioBtn = existingCardSentence.querySelector(
-          "a.icon-link.example-audio:not(#jpdb-media-audio)"
+          "a.icon-link.example-audio:not(#jpdb-media-audio)",
         );
         if (audioBtn) {
           audioBtn.remove();
@@ -448,7 +448,7 @@ async function setupMediaBlock(
   cardIds,
   elements,
   vidRecord,
-  options = {}
+  options = {},
 ) {
   const { isFrontPage = false } = options;
   removeExistingContent({ isFrontPage });
@@ -727,7 +727,7 @@ async function setupMediaBlock(
             : "#bbbbbb";
           console.error("Failed to toggle favorite:", response?.error);
         }
-      }
+      },
     );
   });
 
@@ -791,6 +791,7 @@ async function setupMediaBlock(
     displayCard(0);
   }
 }
+
 // This helper function is now fire-and-forget
 async function getTokensForContext(vid, contextText, elementToUpdate) {
   if (!contextText) return;
@@ -903,7 +904,7 @@ async function insertMediaInReview() {
       cardIds,
       elements,
       vidRecord,
-      { isFrontPage: true }
+      { isFrontPage: true },
     );
     return;
   }
@@ -1028,7 +1029,7 @@ async function checkAndTriggerAutoSync() {
           shouldFetchMedia: settings.shouldFetchMedia,
         },
       },
-      (response) => {}
+      (response) => {},
     );
 
     // Set cooldown to prevent frequent auto-syncs
