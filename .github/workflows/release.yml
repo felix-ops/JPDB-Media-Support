@@ -80,10 +80,6 @@ jobs:
           body: |
             ## JPDB Media Support ${{ steps.current.outputs.tag }}
 
-            ### Installation
-            Download the `.zip` below, go to `chrome://extensions`, enable
-            **Developer mode**, and click **Load unpacked** (extract first), or
-            wait for the Chrome Web Store listing to update.
           files: ${{ env.zip_name }}
           generate_release_notes: true # appends auto-generated commit log
         env:
