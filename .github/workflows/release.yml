@@ -1,0 +1,105 @@
+name: Release & Publish
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Triggers on every push to main. The workflow detects whether the version
+# field in manifest.json changed compared to the previous commit. If it did
+# not change, all publish steps are skipped automatically.
+# ─────────────────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    name: Detect version bump → Release → Publish
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout with full history so we can diff the previous commit ──
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # need HEAD and HEAD~1 to detect the version change
+
+      # ── 2. Read the current version from manifest.json ──────────────────
+      - name: Read current version
+        id: current
+        run: |
+          VERSION=$(jq -r '.version' manifest.json)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION"    >> "$GITHUB_OUTPUT"
+
+      # ── 3. Read the previous version (before this push) ─────────────────
+      - name: Read previous version
+        id: previous
+        run: |
+          PREV=$(git show HEAD~1:manifest.json 2>/dev/null | jq -r '.version' || echo "none")
+          echo "version=$PREV" >> "$GITHUB_OUTPUT"
+
+      # ── 4. Decide whether to proceed ────────────────────────────────────
+      - name: Check for version bump
+        id: check
+        run: |
+          CURRENT="${{ steps.current.outputs.version }}"
+          PREVIOUS="${{ steps.previous.outputs.version }}"
+          echo "Current : $CURRENT"
+          echo "Previous: $PREVIOUS"
+          if [ "$CURRENT" != "$PREVIOUS" ]; then
+            echo "bumped=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "bumped=false" >> "$GITHUB_OUTPUT"
+            echo "Version unchanged – skipping release."
+          fi
+
+      # ── 5. Zip the extension ────────────────────────────────────────────
+      # Zip everything and exclude only dev/meta files. New source files are
+      # picked up automatically without any changes to this workflow.
+      - name: Build extension zip
+        if: steps.check.outputs.bumped == 'true'
+        run: |
+          VERSION="${{ steps.current.outputs.version }}"
+          ZIP="jpdb-media-support-v${VERSION}.zip"
+          zip -r "$ZIP" . \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x "*.zip" \
+            -x "README.md" \
+            -x "LICENSE"
+          echo "zip_name=$ZIP" >> "$GITHUB_ENV"
+
+      # ── 6. Create a GitHub Release and attach the zip ────────────────────
+      - name: Create GitHub Release
+        if: steps.check.outputs.bumped == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.current.outputs.tag }}
+          name: "JPDB Media Support ${{ steps.current.outputs.tag }}"
+          body: |
+            ## JPDB Media Support ${{ steps.current.outputs.tag }}
+
+            ### Installation
+            Download the `.zip` below, go to `chrome://extensions`, enable
+            **Developer mode**, and click **Load unpacked** (extract first), or
+            wait for the Chrome Web Store listing to update.
+          files: ${{ env.zip_name }}
+          generate_release_notes: true # appends auto-generated commit log
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 7. Publish to Chrome Web Store ───────────────────────────────────
+      # Requires three repository secrets (see README / setup guide):
+      #   CWS_CLIENT_ID      – OAuth2 client ID from Google Cloud Console
+      #   CWS_CLIENT_SECRET  – OAuth2 client secret
+      #   CWS_REFRESH_TOKEN  – OAuth2 refresh token
+      #   CWS_EXTENSION_ID   – The extension's ID from the Chrome Web Store URL
+      - name: Upload & publish to Chrome Web Store
+        if: steps.check.outputs.bumped == 'true'
+        uses: mnao305/chrome-extension-upload@v5.0.0
+        with:
+          file-path: ${{ env.zip_name }}
+          extension-id: ${{ secrets.CWS_EXTENSION_ID }}
+          client-id: ${{ secrets.CWS_CLIENT_ID }}
+          client-secret: ${{ secrets.CWS_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.CWS_REFRESH_TOKEN }}
+          publish: true # set to false to upload as a draft instead
