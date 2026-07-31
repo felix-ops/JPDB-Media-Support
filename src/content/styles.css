@@ -1,0 +1,37 @@
+/* Wrapper for both JPDB content and our media block */
+#jpdb-media-wrapper {
+  display: flex;
+  flex-direction: row; /* Side-by-side on desktop */
+  align-items: flex-start;
+  width: 100%;
+  gap: 0px; /* Replaces margin-left for better spacing */
+}
+
+#jpdb-media-block {
+  position: static;
+  top: 20px;
+}
+
+/* --- MOBILE STYLES --- */
+@media (max-width: 768px) {
+  #jpdb-media-wrapper {
+    flex-direction: column; /* Stack elements vertically on smaller screens */
+    gap: 25px;
+  }
+
+  #jpdb-media-block {
+    /* This is the key part: 'order: -1' moves our media block
+       to the TOP of the flex container visually. */
+    order: -1;
+    position: relative; /* Un-stick it on mobile */
+    top: 0;
+    width: 100%; /* Make it full-width on mobile */
+    max-width: 100% !important; /* Ensure it doesn't exceed screen width */
+    margin-left: 0 !important; /* Override any old inline styles */
+  }
+}
+
+#card-count:hover,
+#jpdb-deck-name:hover {
+  opacity: 0;
+}

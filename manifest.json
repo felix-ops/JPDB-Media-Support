@@ -2,27 +2,34 @@
   "name": "JPDB Media Support",
   "short_name": "JPDB Media Support",
   "description": "Imports Media from Anki deck",
-  "version": "1.1.5",
+  "version": "1.2.0",
   "manifest_version": 3,
   "icons": {
-    "128": "icon.png"
+    "128": "public/icons/icon.png"
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "src/background/index.js",
+    "type": "module"
   },
-
   "action": {
     "default_icon": {
-      "32": "icon.png"
+      "32": "public/icons/icon.png"
     },
     "default_title": "JPDB Media Support",
-    "default_popup": "popup.html"
+    "default_popup": "src/popup/index.html"
   },
   "content_scripts": [
     {
       "matches": ["https://jpdb.io/review*", "https://jpdb.io/vocabulary*"],
-      "js": ["dexie.js", "sync-utils.js", "content.js"],
+      "css": ["src/content/styles.css"],
+      "js": ["src/content/content-loader.js"],
       "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/content/*", "src/shared/*", "src/api/*", "public/*"],
+      "matches": ["https://jpdb.io/*"]
     }
   ],
   "permissions": ["unlimitedStorage"]

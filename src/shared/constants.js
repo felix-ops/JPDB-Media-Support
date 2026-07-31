@@ -1,0 +1,20 @@
+export const DEFAULT_SETTINGS = {
+  jpdbApiKey: "",
+  ankiUrl: "http://localhost:8765",
+  autoPlayAudio: false,
+  mediaBlockSize: "650",
+  fetchMediaToBrowser: false,
+  autoSync: false,
+  showImageOnFront: false,
+  showSentenceOnFront: false,
+  autoPlayFront: false,
+  hideNativeSentenceFront: false,
+  extensionEnabled: true,
+  hideNativeSentence: true,
+  showEnglishSentence: true, // internal logic inverts this sometimes, standard default
+  selectedDeck: "",
+  selectedJapaneseField: "",
+  selectedEnglishField: "",
+  selectedImageField: "",
+  selectedAudioField: "",
+};
