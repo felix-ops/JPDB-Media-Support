@@ -310,7 +310,7 @@ function createMediaBlock() {
 
   imgElem.addEventListener("click", () => {
     const audioElem = document.getElementById("jpdb-audio");
-    if (audioElem) {
+    if (audioElem && audioElem.src) {
       pauseOtherAudios(audioElem);
       audioElem.currentTime = 0;
       audioElem.play().catch(() => {});
@@ -463,98 +463,121 @@ async function setupMediaBlock(
   }
 
   const mediaCache = {}; // { cardId: { imageURL: '...', audioURL: '...' } }
+  const inFlightPromises = {}; // { cardId: Promise }
+  let preloadQueue = Promise.resolve();
   let currentCardIndex = 0;
   let favCards = vidRecord.favCards || [];
 
-  const processAndCacheCard = async (cardId) => {
-    if (mediaCache[cardId] || !cardId) return; // Already cached or invalid ID
+  const processAndCacheCard = (cardId) => {
+    if (!cardId) return Promise.resolve(null);
+    if (mediaCache[cardId]) return Promise.resolve(mediaCache[cardId]);
+    if (inFlightPromises[cardId]) return inFlightPromises[cardId];
 
     const cardData = jpdbData.cards[cardId];
-    if (!cardData) return;
+    if (!cardData) return Promise.resolve(null);
 
-    // To prevent multiple simultaneous fetches for the same card,
-    // we mark it as "caching in progress" immediately.
-    mediaCache[cardId] = { imageURL: null, audioURL: null };
+    const promise = (async () => {
+      try {
+        const mediaFromDB = await getMediaForCard(cardId);
+        let imageBase64 = mediaFromDB?.image;
+        let audioBase64 = mediaFromDB?.audio;
 
-    const mediaFromDB = await getMediaForCard(cardId);
-    let imageBase64 = mediaFromDB?.image;
-    let audioBase64 = mediaFromDB?.audio;
+        const imageFetchPromise =
+          !imageBase64 && cardData.image
+            ? fetchMediaFile(cardData.image)
+            : Promise.resolve(null);
+        const audioFetchPromise =
+          !audioBase64 && cardData.audio
+            ? fetchMediaFile(cardData.audio)
+            : Promise.resolve(null);
 
-    const imageFetchPromise =
-      !imageBase64 && cardData.image
-        ? fetchMediaFile(cardData.image)
-        : Promise.resolve(null);
-    const audioFetchPromise =
-      !audioBase64 && cardData.audio
-        ? fetchMediaFile(cardData.audio)
-        : Promise.resolve(null);
+        const [fetchedImage, fetchedAudio] = await Promise.all([
+          imageFetchPromise,
+          audioFetchPromise,
+        ]);
 
-    const [fetchedImage, fetchedAudio] = await Promise.all([
-      imageFetchPromise,
-      audioFetchPromise,
-    ]);
+        if (fetchedImage) imageBase64 = fetchedImage;
+        if (fetchedAudio) audioBase64 = fetchedAudio;
 
-    if (fetchedImage) imageBase64 = fetchedImage;
-    if (fetchedAudio) audioBase64 = fetchedAudio;
+        const imageBlobPromise = imageBase64
+          ? dataToBlob(imageBase64, getMimeType(cardData.image))
+          : Promise.resolve(null);
+        const audioBlobPromise = audioBase64
+          ? dataToBlob(audioBase64, getMimeType(cardData.audio))
+          : Promise.resolve(null);
 
-    const imageBlobPromise = imageBase64
-      ? dataToBlob(imageBase64, getMimeType(cardData.image))
-      : Promise.resolve(null);
-    const audioBlobPromise = audioBase64
-      ? dataToBlob(audioBase64, getMimeType(cardData.audio))
-      : Promise.resolve(null);
+        const [imageBlob, audioBlob] = await Promise.all([
+          imageBlobPromise,
+          audioBlobPromise,
+        ]);
 
-    const [imageBlob, audioBlob] = await Promise.all([
-      imageBlobPromise,
-      audioBlobPromise,
-    ]);
+        const result = {
+          imageURL: imageBlob ? URL.createObjectURL(imageBlob) : null,
+          audioURL: audioBlob ? URL.createObjectURL(audioBlob) : null,
+        };
 
-    // Update the cache with the final Object URLs
-    mediaCache[cardId] = {
-      imageURL: imageBlob ? URL.createObjectURL(imageBlob) : null,
-      audioURL: audioBlob ? URL.createObjectURL(audioBlob) : null,
-    };
+        const hadImage = !!cardData.image;
+        const hadAudio = !!cardData.audio;
+        const imageSuccess = !hadImage || !!result.imageURL;
+        const audioSuccess = !hadAudio || !!result.audioURL;
 
-    // Auto-display media if this card is currently being viewed
-    if (
-      currentCardIndex < cardIds.length &&
-      cardIds[currentCardIndex] === cardId
-    ) {
-      loadMediaContent(cardId);
-    }
+        // Cache the result if successfully loaded or legitimately empty
+        if (imageSuccess && audioSuccess) {
+          mediaCache[cardId] = result;
+        } else if (result.imageURL || result.audioURL || (!hadImage && !hadAudio)) {
+          mediaCache[cardId] = result;
+        }
+
+        // Auto-display media if this card is currently being viewed
+        if (
+          currentCardIndex < cardIds.length &&
+          cardIds[currentCardIndex] === cardId
+        ) {
+          loadMediaContent(cardId);
+        }
+
+        return result;
+      } catch (err) {
+        console.error(`Error caching media for card ${cardId}:`, err);
+        return null;
+      } finally {
+        delete inFlightPromises[cardId];
+      }
+    })();
+
+    inFlightPromises[cardId] = promise;
+    return promise;
   };
 
   /**
-   * Pre-loads a window of cards around the current index.
+   * Pre-loads a small window of cards sequentially around the current index.
    */
   function preloadSurroundingCards(currentIndex) {
-    const PRELOAD_WINDOW = 10;
+    const PRELOAD_WINDOW = 2; // Preload 2 forward, 1 backward
     const totalCards = cardIds.length;
     if (totalCards <= 1) return;
 
-    const cardIdsToPreload = [];
+    const uniqueCardIds = new Set();
 
-    // Gather IDs alternating between forward and backward cards
     for (let i = 1; i <= PRELOAD_WINDOW; i++) {
-      // Add forward card
       const forwardIndex = (currentIndex + i) % totalCards;
       const forwardCardId = cardIds[forwardIndex];
-      if (forwardCardId && !mediaCache[forwardCardId]) {
-        cardIdsToPreload.push(forwardCardId);
-      }
-
-      // Add backward card
-      const backwardIndex = (currentIndex - i + totalCards) % totalCards;
-      const backwardCardId = cardIds[backwardIndex];
-      if (backwardCardId && !mediaCache[backwardCardId]) {
-        cardIdsToPreload.push(backwardCardId);
+      if (forwardCardId && !mediaCache[forwardCardId] && !inFlightPromises[forwardCardId]) {
+        uniqueCardIds.add(forwardCardId);
       }
     }
 
-    // Asynchronously process each unique card ID in the preload window
-    for (const cardId of cardIdsToPreload) {
-      // Fire-and-forget the caching process.
-      processAndCacheCard(cardId).catch(console.error);
+    const backwardIndex = (currentIndex - 1 + totalCards) % totalCards;
+    const backwardCardId = cardIds[backwardIndex];
+    if (backwardCardId && !mediaCache[backwardCardId] && !inFlightPromises[backwardCardId]) {
+      uniqueCardIds.add(backwardCardId);
+    }
+
+    // Process sequentially in the background to prevent overwhelming AnkiConnect
+    for (const cardId of uniqueCardIds) {
+      preloadQueue = preloadQueue
+        .then(() => processAndCacheCard(cardId))
+        .catch(console.error);
     }
   }
 
@@ -566,15 +589,15 @@ async function setupMediaBlock(
     const cardData = jpdbData.cards[cardId];
     loadTextContent(cardData, index);
 
-    // 2. Fetch media for the current card if it's not already cached
-    if (!mediaCache[cardId]) {
-      await processAndCacheCard(cardId);
+    // 2. If already cached, display immediately; otherwise await ongoing or new fetch
+    if (mediaCache[cardId]) {
+      loadMediaContent(cardId);
     } else {
-      // 3. If media is already cached, display it immediately
+      await processAndCacheCard(cardId);
       loadMediaContent(cardId);
     }
 
-    // 4. Trigger the advanced pre-caching for surrounding cards
+    // 3. Trigger sequential pre-caching for surrounding cards
     preloadSurroundingCards(index);
   }
 
@@ -585,11 +608,11 @@ async function setupMediaBlock(
     elements.cardCountElem.innerText = `${index + 1}/${cardIds.length}`;
     elements.cardCountElem.style.display = "block";
 
-    // Pause audio and clear media from view while loading
+    // Pause audio and clear media from view while loading without triggering relative URL fetches
     elements.audioElem.pause();
     elements.imgElem.style.display = "none";
-    elements.imgElem.src = "";
-    elements.audioElem.src = "";
+    elements.imgElem.removeAttribute("src");
+    elements.audioElem.removeAttribute("src");
 
     const cardId = cardData.cardId;
     const isFavorite = favCards.includes(cardId);
@@ -677,15 +700,24 @@ async function setupMediaBlock(
     if (!cachedMedia) return;
 
     const audioElem = elements.audioElem;
-    audioElem.src = cachedMedia.audioURL || "";
-    elements.imgElem.src = cachedMedia.imageURL || "";
-    if (isFrontPage) {
-      getSetting("showImageOnFront", false).then((showImg) => {
-        elements.imgElem.style.display =
-          showImg && cachedMedia.imageURL ? "block" : "none";
-      });
+    if (cachedMedia.audioURL) {
+      audioElem.src = cachedMedia.audioURL;
     } else {
-      elements.imgElem.style.display = cachedMedia.imageURL ? "block" : "none";
+      audioElem.removeAttribute("src");
+    }
+
+    if (cachedMedia.imageURL) {
+      elements.imgElem.src = cachedMedia.imageURL;
+      if (isFrontPage) {
+        getSetting("showImageOnFront", false).then((showImg) => {
+          elements.imgElem.style.display = showImg ? "block" : "none";
+        });
+      } else {
+        elements.imgElem.style.display = "block";
+      }
+    } else {
+      elements.imgElem.removeAttribute("src");
+      elements.imgElem.style.display = "none";
     }
 
     const autoPlayKey = isFrontPage ? "autoPlayFront" : "autoPlayAudio";

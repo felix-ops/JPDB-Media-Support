@@ -71,6 +71,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "fetchMediaFile") {
       const ankiUrl = message.ankiUrl || "http://localhost:8765";
       const filename = message.filename;
+      if (!filename) {
+        sendResponse({ success: false, error: "Missing filename" });
+        return;
+      }
       try {
         const response = await fetch(ankiUrl, {
           method: "POST",
@@ -122,7 +126,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
 
-    //  Action to toggle a card's favorite status 
+    //  Action to toggle a card's favorite status
     else if (message.action === "toggleFavoriteCard") {
       try {
         const { vid, cardId } = message;
@@ -157,7 +161,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
 
-    //  getCardsMapping, sends lightweight card metadata 
+    //  getCardsMapping, sends lightweight card metadata
     else if (message.action === "getCardsMapping") {
       try {
         const cardsArray = await db.cards.bulkGet(message.cardIds);
@@ -173,7 +177,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
 
-    //  Action to get media data for a SINGLE card 
+    //  Action to get media data for a SINGLE card
     else if (message.action === "getMediaForCard") {
       try {
         const cardId = message.cardId;
@@ -226,7 +230,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
 
-    // Action to perform auto-sync 
+    // Action to perform auto-sync
     else if (message.action === "performAutoSync") {
       try {
         const {
@@ -266,7 +270,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
 
-    // Action to get all settings needed for auto-sync 
+    // Action to get all settings needed for auto-sync
     else if (message.action === "getAutoSyncSettings") {
       try {
         const settings = await Promise.all([
@@ -345,7 +349,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               db.cards.bulkPut(configData.cards),
               db.vids.bulkPut(configData.vids),
             ]);
-          }
+          },
         );
         sendResponse({ success: true });
       } catch (error) {
